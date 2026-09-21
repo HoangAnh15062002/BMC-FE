@@ -51,7 +51,9 @@ export const SiteExecutionPage: React.FC = () => {
       setAvailableLabors(lList);
       setAvailableMachines(mList);
       if (pList.length > 0 && !selectedProjectId) {
-        setSelectedProjectId(pList[0].id);
+        const savedId = localStorage.getItem('bmc_active_project_id');
+        const matched = savedId ? pList.find((p: any) => p.id === Number(savedId)) : null;
+        setSelectedProjectId(matched ? matched.id : pList[0].id);
       }
       if (lList.length > 0 && !laborForm.laborId) {
         setLaborForm(prev => ({ ...prev, laborId: String(lList[0].id) }));
@@ -89,7 +91,12 @@ export const SiteExecutionPage: React.FC = () => {
   };
 
   useEffect(() => { loadProjects(); }, []);
-  useEffect(() => { if (selectedProjectId) loadSiteData(selectedProjectId); }, [selectedProjectId]);
+  useEffect(() => {
+    if (selectedProjectId) {
+      localStorage.setItem('bmc_active_project_id', String(selectedProjectId));
+      loadSiteData(selectedProjectId);
+    }
+  }, [selectedProjectId]);
 
   const handleCreateLabor = async (e: React.FormEvent) => {
     e.preventDefault();

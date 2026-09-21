@@ -176,7 +176,6 @@ export const DashboardPage: React.FC = () => {
                   <th>Mã Dự Án</th>
                   <th>Tên Công Trình</th>
                   <th>Chủ Đầu Tư</th>
-                  <th>Thời Gian</th>
                   <th>Tiến Độ</th>
                   <th>Trạng Thái</th>
                   <th>Thao Tác</th>
@@ -185,7 +184,7 @@ export const DashboardPage: React.FC = () => {
               <tbody>
                 {loading && (
                   <tr>
-                    <td colSpan={7} style={{ textAlign: 'center', padding: '28px' }}>
+                    <td colSpan={6} style={{ textAlign: 'center', padding: '28px' }}>
                       <div className="spinner" style={{ margin: '0 auto' }} />
                     </td>
                   </tr>
@@ -196,18 +195,15 @@ export const DashboardPage: React.FC = () => {
                       <span className="table-code">{p.code}</span>
                     </td>
                     <td>
-                      <div className="table-name truncate" style={{ maxWidth: '180px' }}>{p.name}</div>
+                      <div className="table-name truncate" style={{ maxWidth: '200px' }}>{p.name}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--text-dim)', fontSize: '0.7rem', marginTop: '2px' }}>
+                        <Calendar size={10} style={{ flexShrink: 0 }} />
+                        <span>{formatDate(p.startDate)}</span>
+                        {(p.plannedEndDate || p.endDate) && <><span>→</span><span>{formatDate(p.plannedEndDate || p.endDate)}</span></>}
+                      </div>
                     </td>
                     <td>
                       <span className="text-sm text-muted">{p.investorName || 'Nội bộ BMC'}</span>
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: 'var(--text-dim)', fontSize: '0.73rem' }}>
-                        <Calendar size={11} style={{ flexShrink: 0 }} />
-                        <span>{formatDate(p.startDate)}</span>
-                        <span>→</span>
-                        <span>{formatDate(p.plannedEndDate || p.endDate)}</span>
-                      </div>
                     </td>
                     <td>
                       <div className="progress-wrap">
@@ -237,7 +233,7 @@ export const DashboardPage: React.FC = () => {
                 ))}
                 {projects.length === 0 && !loading && (
                   <tr>
-                    <td colSpan={7}>
+                    <td colSpan={6}>
                       <div className="empty-state">
                         <FolderKanban size={32} />
                         <div style={{ fontWeight: 600 }}>Chưa có dự án nào</div>

@@ -84,7 +84,7 @@
   --ease-slow:   0.4s cubic-bezier(0.4, 0, 0.2, 1);
 
   /* ── Layout ── */
-  --sidebar-w: 256px;
+  --sidebar-w: 230px;
   --header-h:  64px;
 }
 
@@ -368,6 +368,8 @@ input, select, textarea {
   flex-direction: column;
   min-width: 0;
   min-height: 100vh;
+  overflow-x: hidden;
+  max-width: calc(100vw - var(--sidebar-w));
 }
 
 /* ── Top Header ── */
@@ -400,8 +402,10 @@ input, select, textarea {
 
 /* ── Content Body ── */
 .content-body {
-  padding: 28px 28px 48px;
+  padding: 24px 24px 48px;
   flex: 1;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 /* ============================================================
@@ -1222,8 +1226,11 @@ input, select, textarea {
 /* ── Grid Layouts ── */
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
-.grid-2-1 { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
-.grid-3-1 { display: grid; grid-template-columns: 3fr 1fr; gap: 20px; }
+.grid-2-1 { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 20px; }
+.grid-3-1 { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 1fr); gap: 20px; }
+
+/* All grid children must not overflow their track */
+.grid-2 > *, .grid-3 > *, .grid-2-1 > *, .grid-3-1 > * { min-width: 0; }
 
 /* ── Action Row ── */
 .action-row {
@@ -1297,7 +1304,32 @@ input, select, textarea {
   font-weight: 500;
 }
 
-/* ── Responsive ── */
+/* ── Responsive — 1100px: collapse right sidebar column ── */
+@media (max-width: 1100px) {
+  .grid-2-1 {
+    grid-template-columns: 1fr;
+  }
+
+  .grid-3-1 {
+    grid-template-columns: 1fr;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 1100px) {
+  .grid-2 {
+    grid-template-columns: 1fr;
+  }
+
+  .grid-3 {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* ── Responsive — 900px: collapse sidebar to icon-only ── */
 @media (max-width: 900px) {
   :root { --sidebar-w: 64px; }
 
@@ -1311,8 +1343,8 @@ input, select, textarea {
   .user-snippet { justify-content: center; }
   .user-avatar { margin: 0; }
 
-  .content-body { padding: 16px; }
-  .top-header { padding: 0 16px; }
+  .content-body { padding: 14px; }
+  .top-header { padding: 0 14px; }
 
   .grid-2, .grid-3, .grid-2-1, .grid-3-1 {
     grid-template-columns: 1fr;

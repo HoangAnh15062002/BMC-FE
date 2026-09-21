@@ -41,7 +41,11 @@ export const ProcurementPage: React.FC = () => {
 
   // Modal: Create Purchase Order
   const [showPOModal, setShowPOModal] = useState(false);
-  const [poForm, setPoForm] = useState({ projectId: '', supplierId: '', poNo: '', poDate: '', note: '' });
+  const [poForm, setPoForm] = useState({
+    projectId: '', supplierId: '', poNo: '', poDate: '', note: '',
+    invoiceNo: '', invoiceDate: '', invoiceStatus: 'PENDING', paymentMethod: '',
+    deliveryDate: ''
+  });
   const [poItems, setPoItems] = useState<POItem[]>([
     { materialId: '', unitId: '', quantity: '', unitPrice: '' }
   ]);
@@ -219,6 +223,11 @@ export const ProcurementPage: React.FC = () => {
         poDate: poForm.poDate || undefined,
         note: poForm.note.trim() || undefined,
         vatRate: 10,
+        invoiceNo: poForm.invoiceNo.trim() || undefined,
+        invoiceDate: poForm.invoiceDate || undefined,
+        invoiceStatus: poForm.invoiceStatus || 'PENDING',
+        paymentMethod: poForm.paymentMethod || undefined,
+        deliveryDate: poForm.deliveryDate || undefined,
         items: validItems.map(it => ({
           materialId: Number(it.materialId),
           unitId: Number(it.unitId) || 1,
@@ -227,7 +236,7 @@ export const ProcurementPage: React.FC = () => {
         })),
       });
       setShowPOModal(false);
-      setPoForm({ projectId: '', supplierId: '', poNo: '', poDate: '', note: '' });
+      setPoForm({ projectId: '', supplierId: '', poNo: '', poDate: '', note: '', invoiceNo: '', invoiceDate: '', invoiceStatus: 'PENDING', paymentMethod: '', deliveryDate: '' });
       setPoItems([{ materialId: '', unitId: '', quantity: '', unitPrice: '' }]);
       alert('Tạo đơn đặt hàng PO thành công!');
       loadData();
@@ -378,9 +387,10 @@ export const ProcurementPage: React.FC = () => {
                   <th>Công Trình Nhận</th>
                   <th>Nhà Cung Cấp</th>
                   <th>Ngày Đặt</th>
-                  <th>Tiền Trước Thuế</th>
-                  <th>VAT</th>
                   <th>Tổng Giá Trị PO</th>
+                  <th>Hóa Đơn</th>
+                  <th>TT Hóa Đơn</th>
+                  <th>Hình Thức TT</th>
                   <th>Trạng Thái</th>
                   <th>Thao Tác</th>
                 </tr>
@@ -399,10 +409,25 @@ export const ProcurementPage: React.FC = () => {
                       {o.supplierName}
                     </td>
                     <td>{formatDate(o.poDate || o.orderDate)}</td>
-                    <td>{formatCurrency(o.amountBeforeTax)}</td>
-                    <td>{formatCurrency(o.vatAmount)}</td>
                     <td style={{ fontWeight: 700, color: 'var(--orange-primary)' }}>
                       {formatCurrency(o.totalAmount)}
+                    </td>
+                    <td style={{ fontSize: '12px' }}>
+                      {o.invoiceNo
+                        ? <span style={{ fontWeight: 600 }}>{o.invoiceNo}<br/><span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>{o.invoiceDate ? formatDate(o.invoiceDate) : ''}</span></span>
+                        : <span style={{ color: 'var(--text-muted)' }}>Chưa có</span>
+                      }
+                    </td>
+                    <td>
+                      {o.invoiceStatus === 'RECEIVED' && <span className="badge badge-active">Đã nhận HĐ</span>}
+                      {o.invoiceStatus === 'PENDING' && <span className="badge badge-warning">Chờ HĐ</span>}
+                      {o.invoiceStatus === 'NOT_REQUIRED' && <span className="badge" style={{ background: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}>Không cần</span>}
+                      {!o.invoiceStatus && <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>-</span>}
+                    </td>
+                    <td>
+                      {o.paymentMethod === 'BANK_TRANSFER' && <span className="badge" style={{ background: 'rgba(59,130,246,0.15)', color: '#3b82f6' }}>Chuyển khoản</span>}
+                      {o.paymentMethod === 'CASH' && <span className="badge" style={{ background: 'rgba(16,185,129,0.15)', color: '#10b981' }}>Tiền mặt</span>}
+                      {!o.paymentMethod && <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>-</span>}
                     </td>
                     <td>
                       <span className={`badge ${getStatusBadgeClass(o.status)}`}>
@@ -424,7 +449,7 @@ export const ProcurementPage: React.FC = () => {
                 ))}
                 {orders.length === 0 && !loading && (
                   <tr>
-                    <td colSpan={9} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>
+                    <td colSpan={10} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>
                       Chưa có đơn đặt hàng PO nào. Bấm <strong>"Tạo Đơn Đặt Hàng PO"</strong> để tạo mới.
                     </td>
                   </tr>
@@ -706,9 +731,46 @@ export const ProcurementPage: React.FC = () => {
                   <input type="date" className="form-input" value={poForm.poDate} onChange={(e) => setPoForm({ ...poForm, poDate: e.target.value })} />
                 </div>
               </div>
-              <div className="form-group">
-                <label className="form-label">Ghi Chú PO</label>
-                <input type="text" className="form-input" value={poForm.note} onChange={(e) => setPoForm({ ...poForm, note: e.target.value })} placeholder="Điều kiện giao hàng, thanh toán..." />
+
+              {/* === Thông tin Hóa đơn & Thanh toán === */}
+              <div style={{ background: 'var(--bg-tertiary)', borderRadius: '8px', padding: '14px 16px', marginBottom: '16px', border: '1px solid var(--border-color)' }}>
+                <p style={{ margin: '0 0 12px', fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)' }}>📋 Thông Tin Hóa Đơn &amp; Thanh Toán</p>
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: '12px' }}>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label">Số Hóa Đơn VAT</label>
+                    <input type="text" className="form-input" value={poForm.invoiceNo} onChange={(e) => setPoForm({ ...poForm, invoiceNo: e.target.value })} placeholder="VD: 1C26TLP.122" />
+                  </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label">Ngày Hóa Đơn</label>
+                    <input type="date" className="form-input" value={poForm.invoiceDate} onChange={(e) => setPoForm({ ...poForm, invoiceDate: e.target.value })} />
+                  </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label">Trạng Thái HĐ</label>
+                    <select className="form-select" value={poForm.invoiceStatus} onChange={(e) => setPoForm({ ...poForm, invoiceStatus: e.target.value })}>
+                      <option value="PENDING">⏳ Chờ hóa đơn</option>
+                      <option value="RECEIVED">✅ Đã nhận HĐ</option>
+                      <option value="NOT_REQUIRED">➖ Không cần HĐ</option>
+                    </select>
+                  </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label">Hình Thức TT</label>
+                    <select className="form-select" value={poForm.paymentMethod} onChange={(e) => setPoForm({ ...poForm, paymentMethod: e.target.value })}>
+                      <option value="">-- Chọn --</option>
+                      <option value="BANK_TRANSFER">🏦 Chuyển khoản</option>
+                      <option value="CASH">💵 Tiền mặt</option>
+                    </select>
+                  </div>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 3fr', gap: '12px', marginTop: '12px' }}>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label">Ngày Giao Hàng TT</label>
+                    <input type="date" className="form-input" value={poForm.deliveryDate} onChange={(e) => setPoForm({ ...poForm, deliveryDate: e.target.value })} />
+                  </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label">Ghi Chú PO</label>
+                    <input type="text" className="form-input" value={poForm.note} onChange={(e) => setPoForm({ ...poForm, note: e.target.value })} placeholder="Điều kiện đặc biệt, tình trạng thực tế nhận hàng..." />
+                  </div>
+                </div>
               </div>
 
               {/* PO Items */}

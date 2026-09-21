@@ -80,20 +80,27 @@ export interface EstimateVersion {
   projectCode?: string;
   projectName?: string;
   versionNo: number;
-  versionName: string;
+  versionName?: string;
+  name?: string;
   description?: string;
   regionId?: number;
   pricePeriodId?: number;
   status?: string;
   calculationStatus?: string;
   totalDirectCost: number;
-  totalIndirectCost: number;
+  totalIndirectCost?: number;
   totalTaxProfit?: number;
   totalBeforeTax?: number;
   vatAmount: number;
-  totalAfterTax: number;
+  vatRateSnapshot?: number;
+  materialAdjustmentFactor?: number;
+  laborAdjustmentFactor?: number;
+  machineAdjustmentFactor?: number;
+  totalEstimate?: number;
+  totalAfterTax?: number;
   isBaseline?: boolean;
   isLocked?: boolean;
+  rowVersion?: string;
   createdAt?: string;
   updatedAt: string;
 }
@@ -151,6 +158,12 @@ export interface PurchaseOrder {
   itemsCount?: number;
   createdByName?: string;
   note?: string;
+  // Hóa đơn & Thanh toán
+  invoiceNo?: string;
+  invoiceDate?: string;
+  invoiceStatus?: string;
+  paymentMethod?: string;
+  deliveryDate?: string;
 }
 
 // Warehouse & Stock Types

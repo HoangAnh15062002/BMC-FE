@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { costControlApi, projectApi } from '../api';
 import { ProjectAlert, Project } from '../types';
 import { formatCurrency, formatDate, formatPercent, formatNumber } from '../utils/formatters';
@@ -18,7 +18,9 @@ export const CostControlPage: React.FC = () => {
       const pList = await projectApi.getAll();
       setProjects(pList);
       if (pList.length > 0 && !selectedProjectId) {
-        setSelectedProjectId(pList[0].id);
+        const savedId = localStorage.getItem('bmc_active_project_id');
+        const matched = savedId ? pList.find((p) => p.id === Number(savedId)) : null;
+        setSelectedProjectId(matched ? matched.id : pList[0].id);
       }
     } catch (err) {
       console.error(err);
@@ -51,6 +53,7 @@ export const CostControlPage: React.FC = () => {
 
   useEffect(() => {
     if (selectedProjectId) {
+      localStorage.setItem('bmc_active_project_id', String(selectedProjectId));
       loadVariance(selectedProjectId);
     }
   }, [selectedProjectId]);

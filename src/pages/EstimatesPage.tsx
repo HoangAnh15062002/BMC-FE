@@ -16,11 +16,26 @@ import {
   Star,
   X,
   FileSpreadsheet,
+  Sliders,
+  Percent,
+  Settings,
 } from 'lucide-react';
+
+const DEFAULT_COST_COMPONENTS = [
+  { costComponentCatalogId: 1, baseCode: 'DIRECT_COST', ratePercent: 6.5, calculationOrder: 10 },
+  { costComponentCatalogId: 2, baseCode: 'DIRECT_COST', ratePercent: 1.2, calculationOrder: 20 },
+  { costComponentCatalogId: 4, baseCode: 'DIRECT_COST', ratePercent: 2.5, calculationOrder: 30 },
+  { costComponentCatalogId: 3, baseCode: 'DIRECT_AND_OVERHEAD', ratePercent: 5.5, calculationOrder: 40 },
+];
 
 export const EstimatesPage: React.FC = () => {
   const [searchParams] = useSearchParams();
-  const initialProjectId = searchParams.get('projectId') ? Number(searchParams.get('projectId')) : undefined;
+  const savedProjectId = localStorage.getItem('bmc_active_project_id')
+    ? Number(localStorage.getItem('bmc_active_project_id'))
+    : undefined;
+  const initialProjectId = searchParams.get('projectId')
+    ? Number(searchParams.get('projectId'))
+    : (savedProjectId || 9);
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<number | undefined>(initialProjectId);
@@ -40,8 +55,22 @@ export const EstimatesPage: React.FC = () => {
     description: '',
     regionCode: '',
     pricePeriodId: '',
+    vatRate: '8',
+    materialAdjustmentFactor: '1.0',
+    laborAdjustmentFactor: '1.0',
+    machineAdjustmentFactor: '1.0',
   });
   const [submitting, setSubmitting] = useState(false);
+
+  // Modal: Calculate & Adjust Tax/Factors
+  const [showCalcModal, setShowCalcModal] = useState(false);
+  const [calcTargetEst, setCalcTargetEst] = useState<EstimateVersion | null>(null);
+  const [calcParams, setCalcParams] = useState({
+    vatRate: '8',
+    materialAdjustmentFactor: '1.0',
+    laborAdjustmentFactor: '1.0',
+    machineAdjustmentFactor: '1.0',
+  });
 
   // Modal: View detail
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -79,6 +108,9 @@ export const EstimatesPage: React.FC = () => {
       ]);
       setRegions(rList);
       setPricePeriods(ppList);
+      if (ppList && ppList.length > 0) {
+        setCreateForm((prev) => ({ ...prev, pricePeriodId: prev.pricePeriodId || String(ppList[0].id) }));
+      }
     } catch (err) {
       console.error(err);
     }
@@ -91,29 +123,56 @@ export const EstimatesPage: React.FC = () => {
 
   useEffect(() => {
     if (selectedProjectId) {
+      localStorage.setItem('bmc_active_project_id', String(selectedProjectId));
       loadEstimates(selectedProjectId);
     }
   }, [selectedProjectId]);
 
-  const handleCalculate = async (id: number) => {
-    if (!selectedProjectId) return;
-    setCalculatingId(id);
+  const openCalcModal = (est: EstimateVersion) => {
+    setCalcTargetEst(est);
+    setCalcParams({
+      vatRate: String(est.vatRateSnapshot ?? 8),
+      materialAdjustmentFactor: String(est.materialAdjustmentFactor ?? 1.0),
+      laborAdjustmentFactor: String(est.laborAdjustmentFactor ?? 1.0),
+      machineAdjustmentFactor: String(est.machineAdjustmentFactor ?? 1.0),
+    });
+    setShowCalcModal(true);
+  };
+
+  const handleExecuteCalculate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedProjectId || !calcTargetEst) return;
+    setCalculatingId(calcTargetEst.id);
     try {
-      await estimateApi.calculate(selectedProjectId, id);
-      alert('Đã chạy Engine tính toán chi phí tự động thành công!');
+      await estimateApi.calculate(selectedProjectId, calcTargetEst.id, {
+        materialAdjustmentFactor: Number(calcParams.materialAdjustmentFactor) || 1.0,
+        laborAdjustmentFactor: Number(calcParams.laborAdjustmentFactor) || 1.0,
+        machineAdjustmentFactor: Number(calcParams.machineAdjustmentFactor) || 1.0,
+        vatRate: calcParams.vatRate !== '' ? Number(calcParams.vatRate) : undefined,
+        rowVersion: calcTargetEst.rowVersion || undefined,
+        costComponents: DEFAULT_COST_COMPONENTS,
+      });
+      setShowCalcModal(false);
+      alert('Đã cập nhật thuế VAT và chạy Engine tính toán chi phí tự động thành công!');
       await loadEstimates(selectedProjectId);
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Lỗi khi tính toán dự toán');
+      const msg =
+        err.response?.data?.message ||
+        (err.response?.data?.errors ? Object.values(err.response.data.errors).flat().join(', ') : null) ||
+        err.message ||
+        'Lỗi khi tính toán dự toán';
+      alert(msg);
     } finally {
       setCalculatingId(null);
     }
   };
 
-  const handleExportExcel = async (id: number, versionName: string) => {
+  const handleExportExcel = async (id: number, versionName?: string) => {
     if (!selectedProjectId) return;
     setDownloadingId(id);
     try {
-      await estimateApi.downloadExcel(selectedProjectId, id, `DuToan_${versionName.replace(/\s+/g, '_')}.xlsx`);
+      const safeName = (versionName || `v${id}`).replace(/\s+/g, '_');
+      await estimateApi.downloadExcel(selectedProjectId, id, `DuToan_${safeName}.xlsx`);
     } catch (err: any) {
       alert('Lỗi khi tải file Excel dự toán');
     } finally {
@@ -123,37 +182,61 @@ export const EstimatesPage: React.FC = () => {
 
   const handleSubmit = async (est: EstimateVersion) => {
     if (!selectedProjectId) return;
-    if (!confirm(`Xác nhận trình duyệt phiên bản "${est.versionName}"?`)) return;
+    const name = est.versionName || est.name || `Phiên bản v${est.versionNo}`;
+    if (!confirm(`Xác nhận trình duyệt phiên bản "${name}"?`)) return;
     try {
-      await estimateApi.submit(selectedProjectId, est.id);
+      await estimateApi.submit(selectedProjectId, est.id, {
+        rowVersion: est.rowVersion || undefined,
+      });
       alert('Đã trình duyệt dự toán thành công!');
       loadEstimates(selectedProjectId);
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Lỗi khi trình duyệt');
+      const msg =
+        err.response?.data?.message ||
+        (err.response?.data?.errors ? Object.values(err.response.data.errors).flat().join(', ') : null) ||
+        err.message ||
+        'Lỗi khi trình duyệt';
+      alert(msg);
     }
   };
 
   const handleApprove = async (est: EstimateVersion) => {
     if (!selectedProjectId) return;
-    if (!confirm(`Xác nhận PHÊ DUYỆT phiên bản "${est.versionName}"? Đây là thao tác chính thức!`)) return;
+    const name = est.versionName || est.name || `Phiên bản v${est.versionNo}`;
+    if (!confirm(`Xác nhận PHÊ DUYỆT phiên bản "${name}"? Đây là thao tác chính thức!`)) return;
     try {
-      await estimateApi.approve(selectedProjectId, est.id);
+      await estimateApi.approve(selectedProjectId, est.id, {
+        rowVersion: est.rowVersion || undefined,
+      });
       alert('Đã phê duyệt dự toán thành công!');
       loadEstimates(selectedProjectId);
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Lỗi khi phê duyệt');
+      const msg =
+        err.response?.data?.message ||
+        (err.response?.data?.errors ? Object.values(err.response.data.errors).flat().join(', ') : null) ||
+        err.message ||
+        'Lỗi khi phê duyệt';
+      alert(msg);
     }
   };
 
   const handleSetBaseline = async (est: EstimateVersion) => {
     if (!selectedProjectId) return;
-    if (!confirm(`Đặt phiên bản "${est.versionName}" làm DỰ TOÁN MỐC (Baseline)? Baseline cũ sẽ bị thay thế.`)) return;
+    const name = est.versionName || est.name || `Phiên bản v${est.versionNo}`;
+    if (!confirm(`Đặt phiên bản "${name}" làm DỰ TOÁN MỐC (Baseline)? Baseline cũ sẽ bị thay thế.`)) return;
     try {
-      await estimateApi.setBaseline(selectedProjectId, est.id);
+      await estimateApi.setBaseline(selectedProjectId, est.id, {
+        rowVersion: est.rowVersion || undefined,
+      });
       alert('Đã đặt baseline thành công!');
       loadEstimates(selectedProjectId);
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Lỗi khi đặt baseline');
+      const msg =
+        err.response?.data?.message ||
+        (err.response?.data?.errors ? Object.values(err.response.data.errors).flat().join(', ') : null) ||
+        err.message ||
+        'Lỗi khi đặt baseline';
+      alert(msg);
     }
   };
 
@@ -173,18 +256,40 @@ export const EstimatesPage: React.FC = () => {
     if (!selectedProjectId) return;
     setSubmitting(true);
     try {
+      const ppId = createForm.pricePeriodId || (pricePeriods.length > 0 ? String(pricePeriods[0].id) : '1');
       await estimateApi.create(selectedProjectId, {
+        name: createForm.versionName.trim(),
         versionName: createForm.versionName.trim(),
         description: createForm.description.trim() || undefined,
+        note: createForm.description.trim() || undefined,
         regionCode: createForm.regionCode || undefined,
-        pricePeriodId: createForm.pricePeriodId ? Number(createForm.pricePeriodId) : undefined,
+        pricePeriodId: Number(ppId),
+        vatRate: createForm.vatRate !== '' ? Number(createForm.vatRate) : undefined,
+        materialAdjustmentFactor: Number(createForm.materialAdjustmentFactor) || 1.0,
+        laborAdjustmentFactor: Number(createForm.laborAdjustmentFactor) || 1.0,
+        machineAdjustmentFactor: Number(createForm.machineAdjustmentFactor) || 1.0,
+        costComponents: DEFAULT_COST_COMPONENTS,
       });
       setShowCreateModal(false);
-      setCreateForm({ versionName: '', description: '', regionCode: '', pricePeriodId: '' });
+      setCreateForm({
+        versionName: '',
+        description: '',
+        regionCode: '',
+        pricePeriodId: '',
+        vatRate: '8',
+        materialAdjustmentFactor: '1.0',
+        laborAdjustmentFactor: '1.0',
+        machineAdjustmentFactor: '1.0',
+      });
       alert('Tạo phiên bản dự toán mới thành công! Hãy bấm "Tính Toán" để chạy engine bóc tách khối lượng.');
       loadEstimates(selectedProjectId);
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Lỗi khi tạo phiên bản dự toán');
+      const msg =
+        err.response?.data?.message ||
+        (err.response?.data?.errors ? Object.values(err.response.data.errors).flat().join(', ') : null) ||
+        err.message ||
+        'Lỗi khi tạo phiên bản dự toán';
+      alert(msg);
     } finally {
       setSubmitting(false);
     }
@@ -192,23 +297,28 @@ export const EstimatesPage: React.FC = () => {
 
   const getWorkflowBtns = (est: EstimateVersion) => {
     const btns = [];
+    const isDraft = est.status === 'DRAFT';
+    const isSubmitted = est.status === 'SUBMITTED';
+    const isApproved = est.status === 'APPROVED';
 
-    // Calculate
-    btns.push(
-      <button
-        key="calc"
-        className="btn btn-primary btn-sm"
-        onClick={() => handleCalculate(est.id)}
-        disabled={calculatingId === est.id}
-        title="Chạy Engine tính toán chi phí tự động"
-      >
-        <Play size={13} />
-        {calculatingId === est.id ? 'Đang tính...' : 'Tính Toán'}
-      </button>
-    );
+    // Calculate & Edit Tax - Only for DRAFT
+    if (isDraft) {
+      btns.push(
+        <button
+          key="calc"
+          className="btn btn-primary btn-sm"
+          onClick={() => openCalcModal(est)}
+          disabled={calculatingId === est.id}
+          title="Tùy chỉnh thuế suất VAT, hệ số trượt giá và chạy engine tính toán"
+        >
+          <Sliders size={13} />
+          {calculatingId === est.id ? 'Đang tính...' : 'Tính Toán & Sửa Thuế'}
+        </button>
+      );
+    }
 
-    // Submit if Draft or Calculated
-    if (['DRAFT', 'CALCULATED'].includes(est.calculationStatus || '') && est.status !== 'APPROVED') {
+    // Submit if Draft and calculated
+    if (isDraft && ['CALCULATED', 'COMPLETE'].includes(est.calculationStatus || '')) {
       btns.push(
         <button
           key="submit"
@@ -222,7 +332,7 @@ export const EstimatesPage: React.FC = () => {
     }
 
     // Approve if submitted
-    if (est.status === 'SUBMITTED' || (est.calculationStatus === 'CALCULATED' && est.status !== 'APPROVED')) {
+    if (isSubmitted) {
       btns.push(
         <button
           key="approve"
@@ -236,7 +346,7 @@ export const EstimatesPage: React.FC = () => {
     }
 
     // Set Baseline if approved and not yet baseline
-    if (est.status === 'APPROVED' && !est.isBaseline) {
+    if (isApproved && !est.isBaseline) {
       btns.push(
         <button
           key="baseline"
@@ -368,18 +478,32 @@ export const EstimatesPage: React.FC = () => {
                       </div>
                     </td>
                     <td style={{ fontWeight: 600 }}>
-                      {est.versionName}
+                      {est.versionName || est.name || `Dự toán v${est.versionNo}`}
                       {est.description && (
                         <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 400 }}>
                           {est.description}
                         </div>
                       )}
                     </td>
-                    <td>{formatCurrency(est.totalDirectCost)}</td>
-                    <td>{formatCurrency(est.totalIndirectCost)}</td>
-                    <td>{formatCurrency(est.vatAmount)}</td>
+                    <td>{formatCurrency(est.totalDirectCost || 0)}</td>
+                    <td>
+                      {formatCurrency(
+                        est.totalIndirectCost ??
+                          Math.max(0, (est.totalBeforeTax || 0) - (est.totalDirectCost || 0))
+                      )}
+                    </td>
+                    <td>
+                      <div style={{ fontWeight: 600 }}>{formatCurrency(est.vatAmount || 0)}</div>
+                      {est.vatRateSnapshot !== undefined && est.vatRateSnapshot !== null ? (
+                        <div style={{ fontSize: '11px', color: 'var(--blue-tech)', fontWeight: 600, marginTop: '2px' }}>
+                          VAT {est.vatRateSnapshot}%
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>Chưa tính</div>
+                      )}
+                    </td>
                     <td style={{ fontWeight: 800, color: 'var(--orange-primary)', fontSize: '0.95rem' }}>
-                      {formatCurrency(est.totalAfterTax)}
+                      {formatCurrency(est.totalAfterTax || est.totalEstimate || 0)}
                     </td>
                     <td>
                       <span className={`badge ${cls}`}>{label}</span>
@@ -482,6 +606,87 @@ export const EstimatesPage: React.FC = () => {
                 </div>
               </div>
 
+              {/* VAT & Factor Settings */}
+              <div style={{
+                background: 'var(--bg-tertiary)', borderRadius: '8px', padding: '14px 16px',
+                margin: '16px 0', border: '1px solid var(--border-color)'
+              }}>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)', marginBottom: '10px' }}>
+                  Cấu Hình Thuế VAT & Hệ Số Điều Chỉnh
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '10px' }}>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}>
+                      <Percent size={13} color="var(--orange-primary)" /> Thuế Suất VAT Đầu Ra (%) *
+                    </label>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="100"
+                        className="form-input"
+                        value={createForm.vatRate}
+                        onChange={(e) => setCreateForm({ ...createForm, vatRate: e.target.value })}
+                        placeholder="VD: 8 hoặc 10"
+                        required
+                        style={{ fontWeight: 700 }}
+                      />
+                      {['8', '10', '0'].map((rate) => (
+                        <button
+                          key={rate}
+                          type="button"
+                          className={`btn btn-sm ${createForm.vatRate === rate ? 'btn-primary' : 'btn-secondary'}`}
+                          style={{ padding: '2px 8px', fontSize: '11px' }}
+                          onClick={() => setCreateForm({ ...createForm, vatRate: rate })}
+                        >
+                          {rate}%
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontSize: '12px' }}>Hệ Số Vật Liệu (KMVL)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      className="form-input"
+                      value={createForm.materialAdjustmentFactor}
+                      onChange={(e) => setCreateForm({ ...createForm, materialAdjustmentFactor: e.target.value })}
+                      placeholder="1.0"
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontSize: '12px' }}>Hệ Số Nhân Công (KNC)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      className="form-input"
+                      value={createForm.laborAdjustmentFactor}
+                      onChange={(e) => setCreateForm({ ...createForm, laborAdjustmentFactor: e.target.value })}
+                      placeholder="1.0"
+                    />
+                  </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontSize: '12px' }}>Hệ Số Máy Thi Công (KMTC)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      className="form-input"
+                      value={createForm.machineAdjustmentFactor}
+                      onChange={(e) => setCreateForm({ ...createForm, machineAdjustmentFactor: e.target.value })}
+                      placeholder="1.0"
+                    />
+                  </div>
+                </div>
+              </div>
+
               <div style={{
                 backgroundColor: 'var(--bg-tertiary)', borderRadius: '8px',
                 padding: '12px 16px', marginBottom: '20px', fontSize: '12px',
@@ -498,6 +703,128 @@ export const EstimatesPage: React.FC = () => {
                 <button type="submit" className="btn btn-primary" disabled={submitting}>
                   <FileSpreadsheet size={15} />
                   {submitting ? 'Đang tạo...' : 'Tạo Phiên Bản'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Calculate & Adjust Tax/Factors */}
+      {showCalcModal && calcTargetEst && (
+        <div style={{
+          position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.65)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
+        }}>
+          <div className="card" style={{ width: '520px', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div className="card-header" style={{ marginBottom: '20px' }}>
+              <div>
+                <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Sliders size={18} color="var(--orange-primary)" />
+                  Cấu Hình & Chạy Tính Toán Dự Toán
+                </h3>
+                <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: 'var(--text-muted)' }}>
+                  Phiên bản v{calcTargetEst.versionNo}: {calcTargetEst.versionName || calcTargetEst.name}
+                </p>
+              </div>
+              <button className="btn btn-secondary btn-sm" onClick={() => setShowCalcModal(false)}>
+                <X size={16} />
+              </button>
+            </div>
+            <form onSubmit={handleExecuteCalculate}>
+              <div className="form-group">
+                <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}>
+                  <Percent size={14} color="var(--orange-primary)" /> Thuế Suất VAT Đầu Ra (%) *
+                </label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="100"
+                    className="form-input"
+                    value={calcParams.vatRate}
+                    onChange={(e) => setCalcParams({ ...calcParams, vatRate: e.target.value })}
+                    placeholder="VD: 8 hoặc 10"
+                    required
+                    style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--orange-primary)' }}
+                  />
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    {['8', '10', '5', '0'].map((rate) => (
+                      <button
+                        key={rate}
+                        type="button"
+                        className={`btn btn-sm ${calcParams.vatRate === rate ? 'btn-primary' : 'btn-secondary'}`}
+                        style={{ padding: '4px 10px', fontSize: '12px', fontWeight: 600 }}
+                        onClick={() => setCalcParams({ ...calcParams, vatRate: rate })}
+                      >
+                        {rate}%
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
+                  💡 Cho phép thay đổi mức thuế GTGT linh hoạt (8% theo chính sách giảm thuế, hoặc 10% tiêu chuẩn).
+                </div>
+              </div>
+
+              <div style={{
+                background: 'var(--bg-tertiary)', borderRadius: '8px', padding: '14px',
+                marginBottom: '18px', border: '1px solid var(--border-color)'
+              }}>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-main)', marginBottom: '10px' }}>
+                  Hệ Số Điều Chỉnh / Trượt Giá Chi Phí:
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                  <div>
+                    <label style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
+                      Vật Liệu (KMVL)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      className="form-input"
+                      value={calcParams.materialAdjustmentFactor}
+                      onChange={(e) => setCalcParams({ ...calcParams, materialAdjustmentFactor: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
+                      Nhân Công (KNC)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      className="form-input"
+                      value={calcParams.laborAdjustmentFactor}
+                      onChange={(e) => setCalcParams({ ...calcParams, laborAdjustmentFactor: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
+                      Máy TC (KMTC)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      className="form-input"
+                      value={calcParams.machineAdjustmentFactor}
+                      onChange={(e) => setCalcParams({ ...calcParams, machineAdjustmentFactor: e.target.value })}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setShowCalcModal(false)}>
+                  Hủy
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={calculatingId === calcTargetEst.id}>
+                  <Play size={14} />
+                  {calculatingId === calcTargetEst.id ? 'Đang chạy engine...' : 'Chạy Engine Tính Toán'}
                 </button>
               </div>
             </form>
@@ -531,7 +858,14 @@ export const EstimatesPage: React.FC = () => {
               {[
                 { label: 'Chi Phí Trực Tiếp (T)', val: detailEst.totalDirectCost, color: 'var(--blue-tech)' },
                 { label: 'Chi Phí Gián Tiếp (GT)', val: detailEst.totalIndirectCost, color: 'var(--orange-primary)' },
-                { label: 'Thuế VAT (10%)', val: detailEst.vatAmount, color: 'var(--text-muted)' },
+                {
+                  label:
+                    detailEst.vatRateSnapshot !== null && detailEst.vatRateSnapshot !== undefined
+                      ? `Thuế VAT (${detailEst.vatRateSnapshot}%)`
+                      : 'Thuế VAT',
+                  val: detailEst.vatAmount,
+                  color: 'var(--text-muted)',
+                },
                 { label: 'Tổng Sau Thuế', val: detailEst.totalAfterTax, color: 'var(--crimson-danger)' },
               ].map((kpi, i) => (
                 <div key={i} className="stat-card" style={{ padding: '14px 16px' }}>
