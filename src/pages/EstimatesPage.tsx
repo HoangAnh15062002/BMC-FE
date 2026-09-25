@@ -20,6 +20,7 @@ import {
   Percent,
   Settings,
 } from 'lucide-react';
+import { EstimateDetailModal } from '../components/estimates/EstimateDetailModal';
 
 const DEFAULT_COST_COMPONENTS = [
   { costComponentCatalogId: 1, baseCode: 'DIRECT_COST', ratePercent: 6.5, calculationOrder: 10 },
@@ -833,92 +834,14 @@ export const EstimatesPage: React.FC = () => {
       )}
 
       {/* Modal: View Estimate Detail */}
-      {showDetailModal && detailEst && (
-        <div style={{
-          position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.65)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
-        }}>
-          <div className="card" style={{ width: '820px', maxHeight: '88vh', overflowY: 'auto' }}>
-            <div className="card-header" style={{ marginBottom: '20px' }}>
-              <div>
-                <h3 style={{ margin: 0 }}>
-                  Chi Tiết Dự Toán — v{detailEst.versionNo}: {detailEst.versionName}
-                </h3>
-                <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: 'var(--text-muted)' }}>
-                  Bóc tách khối lượng theo WBS · Định mức Thông tư 12/2021/TT-BXD
-                </p>
-              </div>
-              <button className="btn btn-secondary btn-sm" onClick={() => setShowDetailModal(false)}>
-                <X size={16} />
-              </button>
-            </div>
-
-            {/* Summary KPIs */}
-            <div className="stats-grid" style={{ marginBottom: '20px', gridTemplateColumns: 'repeat(4, 1fr)' }}>
-              {[
-                { label: 'Chi Phí Trực Tiếp (T)', val: detailEst.totalDirectCost, color: 'var(--blue-tech)' },
-                { label: 'Chi Phí Gián Tiếp (GT)', val: detailEst.totalIndirectCost, color: 'var(--orange-primary)' },
-                {
-                  label:
-                    detailEst.vatRateSnapshot !== null && detailEst.vatRateSnapshot !== undefined
-                      ? `Thuế VAT (${detailEst.vatRateSnapshot}%)`
-                      : 'Thuế VAT',
-                  val: detailEst.vatAmount,
-                  color: 'var(--text-muted)',
-                },
-                { label: 'Tổng Sau Thuế', val: detailEst.totalAfterTax, color: 'var(--crimson-danger)' },
-              ].map((kpi, i) => (
-                <div key={i} className="stat-card" style={{ padding: '14px 16px' }}>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px' }}>{kpi.label}</div>
-                  <div style={{ fontSize: '1rem', fontWeight: 800, color: kpi.color }}>
-                    {formatCurrency(kpi.val || 0)}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* WBS Cost Breakdown Table */}
-            {detailEst.items && detailEst.items.length > 0 ? (
-              <div className="table-container">
-                <table className="bmc-table" style={{ fontSize: '13px' }}>
-                  <thead>
-                    <tr>
-                      <th>Mã Hạng Mục</th>
-                      <th>Tên Hạng Mục</th>
-                      <th>Chi Phí V (Vật Liệu)</th>
-                      <th>Chi Phí N (Nhân Công)</th>
-                      <th>Chi Phí M (Máy)</th>
-                      <th>Tổng Trực Tiếp</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {detailEst.items.map((item: any) => (
-                      <tr key={item.id}>
-                        <td style={{ fontWeight: 700, color: 'var(--orange-primary)' }}>{item.code}</td>
-                        <td style={{ fontWeight: 600 }}>{item.name}</td>
-                        <td>{formatCurrency(item.materialCost || 0)}</td>
-                        <td>{formatCurrency(item.laborCost || 0)}</td>
-                        <td>{formatCurrency(item.machineCost || 0)}</td>
-                        <td style={{ fontWeight: 700, color: 'var(--blue-tech)' }}>
-                          {formatCurrency((item.materialCost || 0) + (item.laborCost || 0) + (item.machineCost || 0))}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>
-                Chưa có số liệu bóc tách. Hãy bấm <strong>"Tính Toán"</strong> để engine tự động bóc tách từ WBS.
-              </div>
-            )}
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
-              <button className="btn btn-secondary" onClick={() => setShowDetailModal(false)}>Đóng</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <EstimateDetailModal
+        isOpen={showDetailModal && !!detailEst}
+        onClose={() => setShowDetailModal(false)}
+        estimate={detailEst}
+        projectName={projects.find(p => p.id === selectedProjectId)?.name}
+        projectCode={projects.find(p => p.id === selectedProjectId)?.code}
+        projectId={selectedProjectId}
+      />
     </div>
   );
 };

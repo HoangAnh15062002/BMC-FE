@@ -20,12 +20,19 @@ import {
   Contract,
   ProjectMember,
   ProjectDocument,
+  ProjectFinancialSummary,
+  TaskBreakdown,
+  MachineShiftLog,
+  StockCard,
+  SupplierQuote,
+  UploadedFile,
 } from '../types';
 
 // Helper to guarantee returned value is an Array
 const ensureArray = <T>(data: any): T[] => {
   if (Array.isArray(data)) return data;
   if (data && typeof data === 'object') {
+    if (Array.isArray(data.value)) return data.value;
     if (Array.isArray(data.items)) return data.items;
     if (Array.isArray(data.data)) return data.data;
     if (Array.isArray(data.results)) return data.results;
@@ -81,6 +88,14 @@ export const projectApi = {
   },
   createTask: async (projectId: number, projectItemId: number, data: any) => {
     const res = await apiClient.post<ProjectTask>(`/projects/${projectId}/items/${projectItemId}/tasks`, data);
+    return res.data;
+  },
+  getFinancialSummary: async (projectId: number) => {
+    const res = await apiClient.get<ProjectFinancialSummary>(`/projects/${projectId}/financial-summary`);
+    return res.data;
+  },
+  getTaskBreakdown: async (taskId: number) => {
+    const res = await apiClient.get<TaskBreakdown>(`/project-tasks/${taskId}/breakdown`);
     return res.data;
   },
 };
@@ -144,6 +159,10 @@ export const procurementApi = {
     const res = await apiClient.get<any>('/purchase-requests', { params: { projectId, status } });
     return ensureArray<PurchaseRequest>(res.data);
   },
+  getPurchaseRequestById: async (id: number) => {
+    const res = await apiClient.get<PurchaseRequest>(`/purchase-requests/${id}`);
+    return res.data;
+  },
   createPurchaseRequest: async (data: any) => {
     const res = await apiClient.post<PurchaseRequest>('/purchase-requests', data);
     return res.data;
@@ -164,12 +183,26 @@ export const procurementApi = {
     const res = await apiClient.get<any>('/purchase-orders', { params: { projectId, status } });
     return ensureArray<PurchaseOrder>(res.data);
   },
+  getPurchaseOrderById: async (id: number) => {
+    const res = await apiClient.get<PurchaseOrder>(`/purchase-orders/${id}`);
+    return res.data;
+  },
   createPurchaseOrder: async (data: any) => {
     const res = await apiClient.post<PurchaseOrder>('/purchase-orders', data);
     return res.data;
   },
   approvePurchaseOrder: async (id: number) => {
     const res = await apiClient.post(`/purchase-orders/${id}/approve`);
+    return res.data;
+  },
+  getQuotes: async (materialId?: number, supplierId?: number) => {
+    const res = await apiClient.get<any>('/suppliers/quotes', {
+      params: { materialId, supplierId },
+    });
+    return ensureArray<SupplierQuote>(res.data);
+  },
+  upsertQuote: async (supplierId: number, data: any) => {
+    const res = await apiClient.post<SupplierQuote>(`/suppliers/${supplierId}/quotes`, data);
     return res.data;
   },
 };
@@ -202,6 +235,58 @@ export const warehouseApi = {
   },
   createTransaction: async (data: any) => {
     const res = await apiClient.post('/warehouse-transactions', data);
+    return res.data;
+  },
+  getStockCard: async (warehouseId: number, materialId: number, fromDate?: string, toDate?: string) => {
+    const res = await apiClient.get<StockCard>('/warehouse-transactions/stock-card', {
+      params: { warehouseId, materialId, fromDate, toDate },
+    });
+    return res.data;
+  },
+};
+
+// Machine Shift API
+export const machineShiftApi = {
+  getAll: async (projectId?: number, projectTaskId?: number, fromDate?: string, toDate?: string) => {
+    const res = await apiClient.get<any>('/machine-shift-logs', {
+      params: { projectId, projectTaskId, fromDate, toDate },
+    });
+    return ensureArray<MachineShiftLog>(res.data);
+  },
+  getById: async (id: number) => {
+    const res = await apiClient.get<MachineShiftLog>(`/machine-shift-logs/${id}`);
+    return res.data;
+  },
+  create: async (data: Partial<MachineShiftLog>) => {
+    const res = await apiClient.post<MachineShiftLog>('/machine-shift-logs', data);
+    return res.data;
+  },
+  update: async (id: number, data: Partial<MachineShiftLog>) => {
+    const res = await apiClient.put<MachineShiftLog>(`/machine-shift-logs/${id}`, data);
+    return res.data;
+  },
+  delete: async (id: number) => {
+    const res = await apiClient.delete(`/machine-shift-logs/${id}`);
+    return res.data;
+  },
+};
+
+// Uploads API (Photos & PDF documents)
+export const uploadApi = {
+  uploadFile: async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await apiClient.post<UploadedFile>('/uploads', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return res.data;
+  },
+  uploadMultiple: async (files: File[]) => {
+    const formData = new FormData();
+    files.forEach((f) => formData.append('files', f));
+    const res = await apiClient.post<UploadedFile[]>('/uploads/multiple', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
     return res.data;
   },
 };
@@ -354,6 +439,10 @@ export const catalogsApi = {
   getNormTasks: async (search?: string) => {
     const res = await apiClient.get<any>('/task-catalog', { params: { search } }).catch(() => ({ data: [] }));
     return ensureArray<any>(res.data);
+  },
+  createNormTask: async (data: any) => {
+    const res = await apiClient.post('/task-catalog', data);
+    return res.data;
   },
   getRegions: async () => {
     const res = await apiClient.get<any>('/regions').catch(() => ({ data: [] }));

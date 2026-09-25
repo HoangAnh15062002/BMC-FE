@@ -80,7 +80,7 @@ export const DashboardPage: React.FC = () => {
                 <BarChart3 size={15} color="white" />
               </div>
               <h1 style={{
-                fontSize: '1.35rem', fontWeight: 800, color: '#f0f6ff',
+                fontSize: '1.35rem', fontWeight: 800, color: '#0f172a',
                 letterSpacing: '-0.02em', margin: 0,
               }}>
                 Hệ Thống Quản Lý Thi Công &amp; Dự Toán BMC

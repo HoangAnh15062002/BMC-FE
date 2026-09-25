@@ -1,8 +1,8 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { projectApi, adminApi } from '../api';
+import { projectApi, adminApi, catalogsApi } from '../api';
 import { Project, ProjectItem, ProjectTask, Contract, ProjectMember, ProjectDocument } from '../types';
-import { formatCurrency, formatDate, getProjectStatusLabel, getItemStatusLabel, getStatusBadgeClass } from '../utils/formatters';
+import { formatCurrency, formatNumber, formatDate, getProjectStatusLabel, getItemStatusLabel, getStatusBadgeClass, formatUnit, formatQuantityWithUnit } from '../utils/formatters';
 import {
   ArrowLeft,
   Layers,
@@ -17,7 +17,12 @@ import {
   Building2,
   CheckCircle,
   X,
+  Award,
+  Eye,
 } from 'lucide-react';
+import { TaskBreakdownDrawer } from '../components/projects/TaskBreakdownDrawer';
+import { BiddingFinancialTab } from '../components/projects/BiddingFinancialTab';
+import { PdfViewerModal } from '../components/common/PdfViewerModal';
 
 export const ProjectDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -25,7 +30,7 @@ export const ProjectDetailPage: React.FC = () => {
   const navigate = useNavigate();
 
   const [project, setProject] = useState<Project | null>(null);
-  const [activeTab, setActiveTab] = useState<'wbs' | 'contracts' | 'members' | 'documents'>('wbs');
+  const [activeTab, setActiveTab] = useState<'wbs' | 'bidding' | 'contracts' | 'members' | 'documents'>('wbs');
 
   const [items, setItems] = useState<ProjectItem[]>([]);
   const [contracts, setContracts] = useState<Contract[]>([]);
@@ -33,10 +38,17 @@ export const ProjectDetailPage: React.FC = () => {
   const [documents, setDocuments] = useState<ProjectDocument[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Task breakdown drawer & PDF viewer modal
+  const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
+  const [pdfModalOpen, setPdfModalOpen] = useState(false);
+  const [pdfModalUrl, setPdfModalUrl] = useState('');
+  const [pdfModalTitle, setPdfModalTitle] = useState('');
+
   // WBS tasks expanded state: map itemId -> tasks
   const [expandedItems, setExpandedItems] = useState<Record<number, boolean>>({});
   const [itemTasks, setItemTasks] = useState<Record<number, ProjectTask[]>>({});
   const [loadingTasks, setLoadingTasks] = useState<Record<number, boolean>>({});
+  const [unitsMap, setUnitsMap] = useState<Record<number, string>>({});
 
   // New item modal
   const [showItemModal, setShowItemModal] = useState(false);
@@ -48,18 +60,28 @@ export const ProjectDetailPage: React.FC = () => {
     if (!projectId) return;
     setLoading(true);
     try {
-      const [p, itms, ctrs, mbrs, docs] = await Promise.all([
+      const [p, itms, ctrs, mbrs, docs, unitsList] = await Promise.all([
         projectApi.getById(projectId),
         projectApi.getItems(projectId),
         adminApi.getContracts(projectId).catch(() => []),
         adminApi.getMembers(projectId).catch(() => []),
         adminApi.getDocuments(projectId).catch(() => []),
+        catalogsApi.getUnits().catch(() => []),
       ]);
       setProject(p);
       setItems(itms);
       setContracts(ctrs);
       setMembers(mbrs);
       setDocuments(docs);
+      if (Array.isArray(unitsList)) {
+        const uMap: Record<number, string> = {};
+        unitsList.forEach((u: any) => {
+          if (u.id) {
+            uMap[u.id] = u.symbol || u.code || u.name;
+          }
+        });
+        setUnitsMap(uMap);
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -200,6 +222,12 @@ export const ProjectDetailPage: React.FC = () => {
           <Layers size={16} /> Cấu Trúc WBS & Công Tác ({items.length})
         </button>
         <button
+          className={`tab-btn ${activeTab === 'bidding' ? 'active' : ''}`}
+          onClick={() => setActiveTab('bidding')}
+        >
+          <Award size={16} /> Hồ Sơ Đấu Thầu & Đánh Giá Lãi/Lỗ
+        </button>
+        <button
           className={`tab-btn ${activeTab === 'contracts' ? 'active' : ''}`}
           onClick={() => setActiveTab('contracts')}
         >
@@ -332,22 +360,44 @@ export const ProjectDetailPage: React.FC = () => {
                                       <th>Khối Lượng Thiết Kế</th>
                                       <th>Tiến Độ Thực Hiện</th>
                                       <th>Trạng Thái</th>
+                                      <th style={{ textAlign: 'right' }}>Thao Tác</th>
                                     </tr>
                                   </thead>
                                   <tbody>
-                                    {tasks.map(t => (
-                                      <tr key={t.id}>
-                                        <td style={{ fontWeight: 700, color: 'var(--blue-tech)' }}>{t.code}</td>
-                                        <td>{t.name}</td>
-                                        <td style={{ fontWeight: 600 }}>{t.quantity || t.plannedQuantity || 0}</td>
-                                        <td>{t.progressPercent || 0}%</td>
-                                        <td>
-                                          <span className={`badge ${getStatusBadgeClass(t.status)}`}>
-                                            {getItemStatusLabel(t.status)}
-                                          </span>
-                                        </td>
-                                      </tr>
-                                    ))}
+                                    {tasks.map(t => {
+                                      const taskUnit = t.unitName || (t.unitId ? unitsMap[t.unitId] : '') || '';
+                                      const qtyInfo = formatQuantityWithUnit(t.quantity || t.plannedQuantity || 0, taskUnit);
+                                      return (
+                                        <tr key={t.id}>
+                                          <td style={{ fontWeight: 700, color: 'var(--blue-tech)' }}>{t.code}</td>
+                                          <td>{t.name}</td>
+                                          <td style={{ fontWeight: 600 }}>
+                                            <div>{qtyInfo.display}</div>
+                                            {qtyInfo.converted && (
+                                              <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 500, marginTop: '2px' }}>
+                                                ≈ {qtyInfo.converted}
+                                              </div>
+                                            )}
+                                          </td>
+                                          <td>{t.progressPercent || 0}%</td>
+                                          <td>
+                                            <span className={`badge ${getStatusBadgeClass(t.status)}`}>
+                                              {getItemStatusLabel(t.status)}
+                                            </span>
+                                          </td>
+                                          <td style={{ textAlign: 'right' }}>
+                                            <button
+                                              className="btn btn-primary btn-sm"
+                                              onClick={() => setSelectedTaskId(t.id)}
+                                              style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', padding: '4px 10px' }}
+                                            >
+                                              <Eye size={13} />
+                                              <span>Chi tiết công tác</span>
+                                            </button>
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
                                   </tbody>
                                 </table>
                               </div>
@@ -369,6 +419,18 @@ export const ProjectDetailPage: React.FC = () => {
             </table>
           </div>
         </div>
+      )}
+
+      {/* Tab: Bidding & Profit/Loss Evaluation */}
+      {activeTab === 'bidding' && (
+        <BiddingFinancialTab
+          projectId={projectId}
+          onViewPdf={(url, title) => {
+            setPdfModalUrl(url);
+            setPdfModalTitle(title);
+            setPdfModalOpen(true);
+          }}
+        />
       )}
 
       {/* Tab 2: Contracts */}
@@ -555,6 +617,21 @@ export const ProjectDetailPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Task Breakdown Drawer */}
+      <TaskBreakdownDrawer
+        isOpen={!!selectedTaskId}
+        onClose={() => setSelectedTaskId(null)}
+        taskId={selectedTaskId}
+      />
+
+      {/* In-App PDF Viewer Modal */}
+      <PdfViewerModal
+        isOpen={pdfModalOpen}
+        onClose={() => setPdfModalOpen(false)}
+        title={pdfModalTitle}
+        pdfUrl={pdfModalUrl}
+      />
     </div>
   );
 };

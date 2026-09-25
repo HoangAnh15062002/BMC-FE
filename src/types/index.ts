@@ -39,6 +39,10 @@ export interface Project {
   investorName?: string;
   itemsCount?: number;
   createdAt?: string;
+  biddingPrice?: number;
+  ownerEstimate?: number;
+  biddingStatus?: string;
+  biddingDocumentUrl?: string;
 }
 
 export interface ProjectItem {
@@ -119,11 +123,34 @@ export interface Supplier {
   isActive: boolean;
 }
 
+export interface PurchaseRequestItem {
+  id?: number;
+  purchaseRequestId?: number;
+  projectItemId?: number;
+  projectItemName?: string;
+  projectTaskId?: number;
+  projectTaskName?: string;
+  materialId: number;
+  materialCode?: string;
+  materialName?: string;
+  unitId?: number;
+  unitName?: string;
+  unitSymbol?: string;
+  quantity: number;
+  estimatedPrice?: number;
+  totalPrice?: number;
+  note?: string;
+}
+
 export interface PurchaseRequest {
   id: number;
   projectId: number;
   projectCode?: string;
   projectName?: string;
+  projectItemId?: number;
+  projectItemName?: string;
+  projectTaskId?: number;
+  projectTaskName?: string;
   requestNo: string;
   requestCode?: string;
   requestDate: string;
@@ -134,7 +161,28 @@ export interface PurchaseRequest {
   createdByName?: string;
   approvedByName?: string;
   itemsCount?: number;
+  totalEstimatedAmount?: number;
   createdAt: string;
+  items?: PurchaseRequestItem[];
+}
+
+export interface PurchaseOrderItem {
+  id?: number;
+  purchaseOrderId?: number;
+  projectItemId?: number;
+  projectItemName?: string;
+  projectTaskId?: number;
+  projectTaskName?: string;
+  materialId: number;
+  materialCode?: string;
+  materialName?: string;
+  unitId?: number;
+  unitName?: string;
+  unitSymbol?: string;
+  quantity: number;
+  unitPrice: number;
+  totalAmount?: number;
+  note?: string;
 }
 
 export interface PurchaseOrder {
@@ -163,7 +211,31 @@ export interface PurchaseOrder {
   invoiceDate?: string;
   invoiceStatus?: string;
   paymentMethod?: string;
-  deliveryDate?: string;
+  items?: PurchaseOrderItem[];
+}
+
+export interface PriceHistoryRecord {
+  id: number;
+  itemType: 'MATERIAL' | 'LABOR' | 'MACHINE';
+  itemId: number;
+  itemCode: string;
+  itemName: string;
+  unit: string;
+  period: string; // e.g. "01/2026", "02/2026", "03/2026"
+  price: number;
+  previousPrice?: number;
+  percentChange?: number;
+  source: string; // e.g. "Công bố Liên sở", "Báo giá NCC", "Định mức BMC"
+  supplierName?: string;
+  projectId?: number;
+  projectName?: string;
+  projectItemId?: number;
+  projectItemName?: string;
+  projectTaskId?: number;
+  projectTaskName?: string;
+  effectiveDate: string;
+  updatedBy?: string;
+  note?: string;
 }
 
 // Warehouse & Stock Types
@@ -212,15 +284,35 @@ export interface WarehouseTransaction {
   note?: string;
 }
 
+// Material Catalog Types
+export interface Material {
+  id: number;
+  code: string;
+  name: string;
+  unitId?: number;
+  unitCode?: string;
+  unitName?: string;
+  unitSymbol?: string;
+  standardPrice?: number;
+  description?: string;
+}
+
 // Site & Cost Control Types
 export interface TaskProgressEntry {
-  id: number;
+  id?: number;
+  logId?: number;
   projectTaskId: number;
   taskName?: string;
-  reportingDate: string;
-  cumulativeQuantity: number;
-  completionPercentage: number;
+  reportingDate?: string;
+  progressDate?: string;
+  completedQuantity?: number;
+  cumulativeQuantity?: number;
+  cumulativeCompletedQuantity?: number;
+  completionPercentage?: number;
+  progressPercent?: number;
   note?: string;
+  createdByName?: string;
+  photoUrls?: string[];
 }
 
 export interface ActualSiteCost {
@@ -325,5 +417,200 @@ export interface ProjectDocument {
   currentVersionNo: number;
   status: string;
   versionsCount: number;
+  latestVersion?: { fileUrl?: string; fileName?: string; fileSize?: number; mimeType?: string };
+  fileUrl?: string;
   updatedAt: string;
 }
+
+// -------------------------------------------------------------
+// Upgraded Construction Domain Interfaces
+// -------------------------------------------------------------
+
+export interface ProjectFinancialSummary {
+  projectId: number;
+  projectCode: string;
+  projectName: string;
+  investorName?: string;
+  status: string;
+  ownerEstimate?: number;
+  biddingPrice?: number;
+  biddingStatus?: string;
+  biddingDocumentUrl?: string;
+  baselineDirectCost: number;
+  baselineIndirectCost: number;
+  baselineTotalEstimate: number;
+  baselineTotalWithVat: number;
+  actualMaterialCost: number;
+  actualLaborCost: number;
+  actualMachineCost: number;
+  actualOtherCost: number;
+  totalActualCost: number;
+  plannedProfit?: number;
+  plannedProfitMarginPercent?: number;
+  currentProfit?: number;
+  currentProfitMarginPercent?: number;
+  costVariance: number;
+  costVariancePercent: number;
+}
+
+export interface TaskResourceItem {
+  resourceId: number;
+  code: string;
+  name: string;
+  unit: string;
+  normRate: number;
+  totalQuantity: number;
+  unitPrice: number;
+  totalAmount: number;
+}
+
+export interface TaskActualMaterial {
+  transactionId: number;
+  transactionNo: string;
+  transactionDate: string;
+  materialName: string;
+  unit: string;
+  quantity: number;
+  unitPrice: number;
+  amount: number;
+}
+
+export interface TaskActualMachine {
+  shiftLogId: number;
+  logDate: string;
+  machineName: string;
+  operatorName?: string;
+  shiftCount: number;
+  hoursWorked: number;
+  totalCost: number;
+  notes?: string;
+}
+
+export interface TaskProgressItem {
+  logId: number;
+  progressDate: string;
+  completedQuantity: number;
+  cumulativeCompletedQuantity: number;
+  progressPercent: number;
+  note?: string;
+  createdByName?: string;
+  photoUrls: string[];
+}
+
+export interface TaskPhoto {
+  url: string;
+  date: string;
+  note?: string;
+}
+
+export interface TaskBreakdown {
+  taskId: number;
+  projectId: number;
+  projectName: string;
+  projectItemId: number;
+  projectItemName: string;
+  code: string;
+  name: string;
+  unitName: string;
+  plannedQuantity: number;
+  completedQuantity: number;
+  progressPercent: number;
+  status: string;
+  plannedStart?: string;
+  plannedEnd?: string;
+  actualStart?: string;
+  actualEnd?: string;
+  plannedMaterialCost: number;
+  plannedLaborCost: number;
+  plannedMachineCost: number;
+  totalPlannedCost: number;
+  actualMaterialCost: number;
+  actualLaborCost: number;
+  actualMachineCost: number;
+  totalActualCost: number;
+  costVariance: number;
+  materials: TaskResourceItem[];
+  labors: TaskResourceItem[];
+  machines: TaskResourceItem[];
+  actualMaterials: TaskActualMaterial[];
+  actualMachines: TaskActualMachine[];
+  progressLogs: TaskProgressItem[];
+  photos: TaskPhoto[];
+}
+
+export interface MachineShiftLog {
+  id: number;
+  projectId: number;
+  projectName?: string;
+  projectItemId?: number;
+  projectItemName?: string;
+  projectTaskId?: number;
+  projectTaskName?: string;
+  logDate: string;
+  machineName: string;
+  operatorName?: string;
+  shiftCount: number;
+  hoursWorked: number;
+  unitPrice: number;
+  fuelCost: number;
+  totalCost: number;
+  notes?: string;
+  createdAt?: string;
+}
+
+export interface StockCardEntry {
+  transactionId: number;
+  transactionNo: string;
+  transactionDate: string;
+  transactionType: string;
+  referenceDoc?: string;
+  projectName?: string;
+  taskName?: string;
+  inQuantity: number;
+  outQuantity: number;
+  balanceAfter: number;
+  unitPrice: number;
+  totalAmount: number;
+  note?: string;
+}
+
+export interface StockCard {
+  warehouseId: number;
+  warehouseName: string;
+  materialId: number;
+  materialCode: string;
+  materialName: string;
+  unitName: string;
+  openingBalance: number;
+  totalIn: number;
+  totalOut: number;
+  closingBalance: number;
+  entries: StockCardEntry[];
+}
+
+export interface SupplierQuote {
+  supplierId: number;
+  supplierCode: string;
+  supplierName: string;
+  contactPerson?: string;
+  phone?: string;
+  materialId: number;
+  materialCode: string;
+  materialName: string;
+  unitName: string;
+  unitPrice?: number;
+  quotedDate?: string;
+  leadTimeDays?: number;
+  isPreferred: boolean;
+  note?: string;
+}
+
+export interface UploadedFile {
+  url: string;
+  fullUrl: string;
+  fileName: string;
+  storedFileName: string;
+  fileSize: number;
+  mimeType: string;
+}
+

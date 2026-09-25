@@ -1,16 +1,26 @@
-﻿import React, { useEffect, useState } from 'react';
-import { warehouseApi } from '../api';
-import { Warehouse, WarehouseStockItem, WarehouseTransaction } from '../types';
-import { formatCurrency, formatNumber, formatDate } from '../utils/formatters';
-import { Warehouse as WarehouseIcon, PackageCheck, History, Eye, Plus, X } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { warehouseApi, catalogsApi } from '../api';
+import { Warehouse, WarehouseStockItem, WarehouseTransaction, StockCard, Material } from '../types';
+import { formatCurrency, formatNumber, formatDate, formatUnit } from '../utils/formatters';
+import { Warehouse as WarehouseIcon, PackageCheck, History, Eye, Plus, X, FileSpreadsheet, ArrowDownRight, ArrowUpRight, Search, Layers } from 'lucide-react';
+import { WBSStockTab } from '../components/warehouses/WBSStockTab';
 
 export const WarehousesPage: React.FC = () => {
-  const [tab, setTab] = useState<'warehouses' | 'stocks' | 'transactions'>('warehouses');
+  const [tab, setTab] = useState<'warehouses' | 'stocks' | 'project-stocks' | 'transactions' | 'stock-card'>('warehouses');
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<number | undefined>();
   const [stocks, setStocks] = useState<WarehouseStockItem[]>([]);
   const [transactions, setTransactions] = useState<WarehouseTransaction[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Stock Card state
+  const [materials, setMaterials] = useState<Material[]>([]);
+  const [stockCardWarehouseId, setStockCardWarehouseId] = useState<number | undefined>();
+  const [stockCardMaterialId, setStockCardMaterialId] = useState<number | undefined>();
+  const [fromDate, setFromDate] = useState<string>('');
+  const [toDate, setToDate] = useState<string>('');
+  const [stockCardData, setStockCardData] = useState<StockCard | null>(null);
+  const [loadingStockCard, setLoadingStockCard] = useState(false);
 
   // New warehouse modal
   const [showWhModal, setShowWhModal] = useState(false);
@@ -24,11 +34,42 @@ export const WarehousesPage: React.FC = () => {
       setWarehouses(wList);
       if (wList.length > 0 && !selectedWarehouseId) {
         setSelectedWarehouseId(wList[0].id);
+        setStockCardWarehouseId(wList[0].id);
       }
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadMaterials = async () => {
+    try {
+      const mats = await catalogsApi.getMaterials();
+      setMaterials(mats);
+      if (mats.length > 0 && !stockCardMaterialId) {
+        setStockCardMaterialId(mats[0].id);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const loadStockCard = async () => {
+    if (!stockCardWarehouseId || !stockCardMaterialId) return;
+    setLoadingStockCard(true);
+    try {
+      const data = await warehouseApi.getStockCard(
+        stockCardWarehouseId,
+        stockCardMaterialId,
+        fromDate || undefined,
+        toDate || undefined
+      );
+      setStockCardData(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingStockCard(false);
     }
   };
 
@@ -53,7 +94,14 @@ export const WarehousesPage: React.FC = () => {
   useEffect(() => {
     loadWarehouses();
     loadTransactions();
+    loadMaterials();
   }, []);
+
+  useEffect(() => {
+    if (tab === 'stock-card' && stockCardWarehouseId && stockCardMaterialId) {
+      loadStockCard();
+    }
+  }, [tab, stockCardWarehouseId, stockCardMaterialId]);
 
   useEffect(() => {
     if (selectedWarehouseId) {
@@ -97,10 +145,22 @@ export const WarehousesPage: React.FC = () => {
           <PackageCheck size={16} /> Bảng Tồn Kho Thời Gian Thực
         </button>
         <button
+          className={`tab-btn ${tab === 'project-stocks' ? 'active' : ''}`}
+          onClick={() => setTab('project-stocks')}
+        >
+          <Layers size={16} /> Tồn Kho Theo Dự Án & Công Tác (WBS)
+        </button>
+        <button
           className={`tab-btn ${tab === 'transactions' ? 'active' : ''}`}
           onClick={() => setTab('transactions')}
         >
           <History size={16} /> Lịch Sử Nhập / Xuất Kho ({transactions.length})
+        </button>
+        <button
+          className={`tab-btn ${tab === 'stock-card' ? 'active' : ''}`}
+          onClick={() => setTab('stock-card')}
+        >
+          <FileSpreadsheet size={16} /> Thẻ Kho Chi Tiết (Stock Card)
         </button>
       </div>
 
@@ -220,7 +280,7 @@ export const WarehousesPage: React.FC = () => {
                     <tr key={idx}>
                       <td style={{ fontWeight: 700, color: 'var(--blue-tech)' }}>{s.materialCode}</td>
                       <td style={{ fontWeight: 600 }}>{s.materialName}</td>
-                      <td>{s.unitCode || s.unitName || '-'}</td>
+                      <td>{formatUnit(s.unitCode || s.unitName)}</td>
                       <td style={{ fontWeight: 700, color: (s.quantityOnHand || s.currentQuantity || 0) < 0 ? 'var(--crimson-danger)' : 'var(--text-main)' }}>
                         {formatNumber(s.quantityOnHand ?? s.currentQuantity ?? 0)}
                       </td>
@@ -243,6 +303,9 @@ export const WarehousesPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Tab: Project & WBS Stock Allocation */}
+      {tab === 'project-stocks' && <WBSStockTab />}
 
       {/* Tab 3: Transactions */}
       {tab === 'transactions' && (
@@ -294,6 +357,220 @@ export const WarehousesPage: React.FC = () => {
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Tab 4: Detailed Stock Card */}
+      {tab === 'stock-card' && (
+        <div>
+          <div className="card" style={{ marginBottom: '20px', padding: '16px 20px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.5fr 1fr 1fr auto', gap: '14px', alignItems: 'flex-end' }}>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label" style={{ fontSize: '12px', fontWeight: 600 }}>1. Kho Vật Tư *</label>
+                <select
+                  className="form-select"
+                  value={stockCardWarehouseId || ''}
+                  onChange={(e) => setStockCardWarehouseId(Number(e.target.value))}
+                >
+                  {warehouses.map((w) => (
+                    <option key={w.id} value={w.id}>[{w.code}] {w.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label" style={{ fontSize: '12px', fontWeight: 600 }}>2. Danh Mục Vật Tư *</label>
+                <select
+                  className="form-select"
+                  value={stockCardMaterialId || ''}
+                  onChange={(e) => setStockCardMaterialId(Number(e.target.value))}
+                >
+                  {materials.map((m) => (
+                    <option key={m.id} value={m.id}>[{m.code}] {m.name} ({formatUnit(m.unitName || m.unitCode) || 'ĐVT'})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label" style={{ fontSize: '12px', fontWeight: 600 }}>Từ Ngày</label>
+                <input
+                  type="date"
+                  className="form-input"
+                  value={fromDate}
+                  onChange={(e) => setFromDate(e.target.value)}
+                />
+              </div>
+
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label" style={{ fontSize: '12px', fontWeight: 600 }}>Đến Ngày</label>
+                <input
+                  type="date"
+                  className="form-input"
+                  value={toDate}
+                  onChange={(e) => setToDate(e.target.value)}
+                />
+              </div>
+
+              <button
+                className="btn btn-primary"
+                onClick={loadStockCard}
+                disabled={loadingStockCard}
+                style={{ height: '38px', display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <Search size={15} /> {loadingStockCard ? 'Đang tải...' : 'Tra Cứu'}
+              </button>
+            </div>
+          </div>
+
+          {/* KPI Summary Cards */}
+          {stockCardData && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '20px' }}>
+              <div className="card" style={{ padding: '16px', borderLeft: '4px solid var(--blue-tech)' }}>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>Tồn Đầu Kỳ</div>
+                <div style={{ fontSize: '22px', fontWeight: 800, color: 'var(--blue-tech)' }}>
+                  {formatNumber(stockCardData.openingBalance)}
+                  <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-muted)', marginLeft: '6px' }}>
+                    {formatUnit(stockCardData.unitName)}
+                  </span>
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>Số dư đầu kỳ tra cứu</div>
+              </div>
+
+              <div className="card" style={{ padding: '16px', borderLeft: '4px solid var(--emerald-success)' }}>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>Tổng Nhập Trong Kỳ</div>
+                <div style={{ fontSize: '22px', fontWeight: 800, color: 'var(--emerald-success)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <ArrowDownRight size={20} />
+                  +{formatNumber(stockCardData.totalIn)}
+                  <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-muted)', marginLeft: '4px' }}>
+                    {formatUnit(stockCardData.unitName)}
+                  </span>
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>Nhập từ PO & điều chuyển</div>
+              </div>
+
+              <div className="card" style={{ padding: '16px', borderLeft: '4px solid var(--crimson-danger)' }}>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>Tổng Xuất Trong Kỳ</div>
+                <div style={{ fontSize: '22px', fontWeight: 800, color: 'var(--crimson-danger)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <ArrowUpRight size={20} />
+                  -{formatNumber(stockCardData.totalOut)}
+                  <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-muted)', marginLeft: '4px' }}>
+                    {formatUnit(stockCardData.unitName)}
+                  </span>
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>Xuất cấp phát thi công WBS</div>
+              </div>
+
+              <div className="card" style={{ padding: '16px', borderLeft: '4px solid var(--orange-primary)' }}>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>Tồn Cuối Kỳ</div>
+                <div style={{ fontSize: '22px', fontWeight: 800, color: 'var(--orange-primary)' }}>
+                  {formatNumber(stockCardData.closingBalance)}
+                  <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-muted)', marginLeft: '6px' }}>
+                    {formatUnit(stockCardData.unitName)}
+                  </span>
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>Tồn sổ sách thực tế hiện tại</div>
+              </div>
+            </div>
+          )}
+
+          {/* Ledger Table */}
+          <div className="card">
+            <div className="card-header" style={{ marginBottom: '16px' }}>
+              <div>
+                <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <FileSpreadsheet size={18} color="var(--orange-primary)" />
+                  Sổ Thẻ Kho: {stockCardData?.materialName ? `[${stockCardData.materialCode}] ${stockCardData.materialName}` : 'Chi tiết nhập xuất'}
+                </h3>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                  Kho: <strong>{stockCardData?.warehouseName || warehouses.find(w => w.id === stockCardWarehouseId)?.name || 'Kho đã chọn'}</strong> | ĐVT: <strong>{formatUnit(stockCardData?.unitName) || 'Đơn vị'}</strong>
+                </p>
+              </div>
+            </div>
+
+            <div className="table-container">
+              <table className="bmc-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: '100px' }}>Ngày Giao Dịch</th>
+                    <th style={{ width: '130px' }}>Số Chứng Từ</th>
+                    <th style={{ width: '110px' }}>Loại Phiếu</th>
+                    <th>Dự Án / Hạng Mục / Công Tác Nhận</th>
+                    <th style={{ width: '110px', textAlign: 'right' }}>Đơn Giá (VNĐ)</th>
+                    <th style={{ width: '90px', textAlign: 'right', color: 'var(--emerald-success)' }}>SL Nhập</th>
+                    <th style={{ width: '90px', textAlign: 'right', color: 'var(--crimson-danger)' }}>SL Xuất</th>
+                    <th style={{ width: '100px', textAlign: 'right', fontWeight: 700 }}>Tồn Lũy Kế</th>
+                    <th style={{ width: '130px', textAlign: 'right' }}>Thành Tiền</th>
+                    <th>Ghi Chú</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {/* Opening balance row */}
+                  {stockCardData && (
+                    <tr style={{ backgroundColor: 'var(--bg-tertiary)', fontWeight: 600 }}>
+                      <td colSpan={7} style={{ fontStyle: 'italic', color: 'var(--text-muted)' }}>
+                        Số dư tồn kho đầu kỳ
+                      </td>
+                      <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--blue-tech)' }}>
+                        {formatNumber(stockCardData.openingBalance)}
+                      </td>
+                      <td style={{ textAlign: 'right' }}>-</td>
+                      <td style={{ fontStyle: 'italic', color: 'var(--text-muted)' }}>Số dư chuyển tiếp</td>
+                    </tr>
+                  )}
+
+                  {stockCardData?.entries.map((entry, i) => (
+                    <tr key={i}>
+                      <td>{formatDate(entry.transactionDate)}</td>
+                      <td style={{ fontWeight: 700, color: 'var(--orange-primary)' }}>{entry.transactionNo}</td>
+                      <td>
+                        <span className={`badge ${entry.transactionType?.startsWith('IN') ? 'badge-approved' : 'badge-warning'}`}>
+                          {entry.transactionType?.startsWith('IN') ? 'Nhập Kho' : 'Xuất Kho'}
+                        </span>
+                      </td>
+                      <td>
+                        {entry.projectName ? (
+                          <div>
+                            <span style={{ fontWeight: 600, color: 'var(--text-main)' }}>{entry.projectName}</span>
+                            {entry.taskName && (
+                              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                                Công tác: {entry.taskName}
+                              </div>
+                            )}
+                          </div>
+                        ) : entry.referenceDoc ? (
+                          <span style={{ color: 'var(--blue-tech)' }}>Chứng từ: {entry.referenceDoc}</span>
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)' }}>Kho bãi nội bộ</span>
+                        )}
+                      </td>
+                      <td style={{ textAlign: 'right' }}>{formatCurrency(entry.unitPrice)}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--emerald-success)' }}>
+                        {entry.inQuantity > 0 ? `+${formatNumber(entry.inQuantity)}` : '-'}
+                      </td>
+                      <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--crimson-danger)' }}>
+                        {entry.outQuantity > 0 ? `-${formatNumber(entry.outQuantity)}` : '-'}
+                      </td>
+                      <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--text-main)' }}>
+                        {formatNumber(entry.balanceAfter)}
+                      </td>
+                      <td style={{ textAlign: 'right', fontWeight: 600 }}>
+                        {formatCurrency(entry.totalAmount)}
+                      </td>
+                      <td style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{entry.note || '-'}</td>
+                    </tr>
+                  ))}
+
+                  {(!stockCardData || stockCardData.entries.length === 0) && (
+                    <tr>
+                      <td colSpan={10} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>
+                        {loadingStockCard ? 'Đang trích xuất dữ liệu thẻ kho...' : 'Chưa có biến động nhập xuất nào cho mặt hàng này trong kỳ tra cứu.'}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}

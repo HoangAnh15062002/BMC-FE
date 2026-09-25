@@ -2,7 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { procurementApi, projectApi, catalogsApi } from '../api';
 import { Supplier, PurchaseRequest, PurchaseOrder, Project } from '../types';
 import { formatCurrency, formatDate, getPurchaseStatusLabel, getStatusBadgeClass } from '../utils/formatters';
-import { ShoppingCart, Truck, FileCheck, Plus, Check, X, Building2, Send } from 'lucide-react';
+import { ShoppingCart, Truck, FileCheck, Plus, Check, X, Building2, Send, Eye } from 'lucide-react';
+import { PRDetailModal } from '../components/procurement/PRDetailModal';
+import { PODetailModal } from '../components/procurement/PODetailModal';
 
 interface PRItem {
   materialId: number | '';
@@ -34,7 +36,9 @@ export const ProcurementPage: React.FC = () => {
 
   // Modal: Create Purchase Request
   const [showPRModal, setShowPRModal] = useState(false);
-  const [prForm, setPrForm] = useState({ projectId: '', requestNo: '', note: '' });
+  const [prForm, setPrForm] = useState({ projectId: '', projectItemId: '', projectTaskId: '', requestNo: '', note: '' });
+  const [prItemsList, setPrItemsList] = useState<any[]>([]);
+  const [prTasksList, setPrTasksList] = useState<any[]>([]);
   const [prItems, setPrItems] = useState<PRItem[]>([
     { materialId: '', unitId: '', quantity: '', note: '' }
   ]);
@@ -42,13 +46,24 @@ export const ProcurementPage: React.FC = () => {
   // Modal: Create Purchase Order
   const [showPOModal, setShowPOModal] = useState(false);
   const [poForm, setPoForm] = useState({
-    projectId: '', supplierId: '', poNo: '', poDate: '', note: '',
+    projectId: '', projectItemId: '', projectTaskId: '', supplierId: '', poNo: '', poDate: '', note: '',
     invoiceNo: '', invoiceDate: '', invoiceStatus: 'PENDING', paymentMethod: '',
-    deliveryDate: ''
+    deliveryDate: '',
+    vatOption: '10',
+    shippingFee: '',
+    shippingNote: '',
   });
+  const [poItemsList, setPoItemsList] = useState<any[]>([]);
+  const [poTasksList, setPoTasksList] = useState<any[]>([]);
   const [poItems, setPoItems] = useState<POItem[]>([
     { materialId: '', unitId: '', quantity: '', unitPrice: '' }
   ]);
+
+  // Executive Modals: PR & PO Details
+  const [selectedPR, setSelectedPR] = useState<PurchaseRequest | null>(null);
+  const [showPRDetailModal, setShowPRDetailModal] = useState(false);
+  const [selectedPO, setSelectedPO] = useState<PurchaseOrder | null>(null);
+  const [showPODetailModal, setShowPODetailModal] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
 
@@ -80,13 +95,44 @@ export const ProcurementPage: React.FC = () => {
     loadData();
   }, []);
 
+  const handleViewPRDetail = async (pr: PurchaseRequest) => {
+    try {
+      const fullPR = await procurementApi.getPurchaseRequestById(pr.id);
+      setSelectedPR(fullPR || pr);
+    } catch {
+      setSelectedPR(pr);
+    }
+    setShowPRDetailModal(true);
+  };
+
+  const handleViewPODetail = async (po: PurchaseOrder) => {
+    try {
+      const fullPO = await procurementApi.getPurchaseOrderById(po.id);
+      setSelectedPO(fullPO || po);
+    } catch {
+      setSelectedPO(po);
+    }
+    setShowPODetailModal(true);
+  };
+
   const handleApproveRequest = async (id: number) => {
     if (!confirm('Xác nhận phê duyệt phiếu yêu cầu vật tư này?')) return;
     try {
       await procurementApi.approvePurchaseRequest(id);
+      alert('Đã phê duyệt phiếu yêu cầu vật tư thành công!');
       loadData();
     } catch (err: any) {
       alert(err.response?.data?.message || 'Lỗi khi duyệt phiếu yêu cầu');
+    }
+  };
+
+  const handleRejectRequest = async (id: number, reason: string) => {
+    try {
+      await procurementApi.rejectPurchaseRequest(id, reason);
+      alert('Đã từ chối phiếu yêu cầu vật tư.');
+      loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Lỗi khi từ chối phiếu yêu cầu');
     }
   };
 
@@ -105,6 +151,7 @@ export const ProcurementPage: React.FC = () => {
     if (!confirm('Xác nhận phê duyệt đơn đặt hàng PO này?')) return;
     try {
       await procurementApi.approvePurchaseOrder(id);
+      alert('Đã phê duyệt đơn đặt hàng PO thành công!');
       loadData();
     } catch (err: any) {
       alert(err.response?.data?.message || 'Lỗi khi duyệt đơn PO');
@@ -163,6 +210,60 @@ export const ProcurementPage: React.FC = () => {
     });
   };
 
+  const handlePRProjectChange = async (projId: string) => {
+    setPrForm(prev => ({ ...prev, projectId: projId, projectItemId: '', projectTaskId: '' }));
+    setPrItemsList([]);
+    setPrTasksList([]);
+    if (projId) {
+      try {
+        const itms = await projectApi.getItems(Number(projId));
+        setPrItemsList(itms);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  };
+
+  const handlePRItemChange = async (itemId: string) => {
+    setPrForm(prev => ({ ...prev, projectItemId: itemId, projectTaskId: '' }));
+    setPrTasksList([]);
+    if (prForm.projectId && itemId) {
+      try {
+        const tsks = await projectApi.getTasks(Number(prForm.projectId), Number(itemId));
+        setPrTasksList(tsks);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  };
+
+  const handlePOProjectChange = async (projId: string) => {
+    setPoForm(prev => ({ ...prev, projectId: projId, projectItemId: '', projectTaskId: '' }));
+    setPoItemsList([]);
+    setPoTasksList([]);
+    if (projId) {
+      try {
+        const itms = await projectApi.getItems(Number(projId));
+        setPoItemsList(itms);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  };
+
+  const handlePOItemChange = async (itemId: string) => {
+    setPoForm(prev => ({ ...prev, projectItemId: itemId, projectTaskId: '' }));
+    setPoTasksList([]);
+    if (poForm.projectId && itemId) {
+      try {
+        const tsks = await projectApi.getTasks(Number(poForm.projectId), Number(itemId));
+        setPoTasksList(tsks);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  };
+
   const handleCreatePR = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!prForm.projectId) {
@@ -181,6 +282,8 @@ export const ProcurementPage: React.FC = () => {
         requestNo: prForm.requestNo.trim() || undefined,
         note: prForm.note.trim() || undefined,
         items: validItems.map(it => ({
+          projectItemId: prForm.projectItemId ? Number(prForm.projectItemId) : undefined,
+          projectTaskId: prForm.projectTaskId ? Number(prForm.projectTaskId) : undefined,
           materialId: Number(it.materialId),
           unitId: Number(it.unitId) || 1,
           quantity: Number(it.quantity),
@@ -188,7 +291,7 @@ export const ProcurementPage: React.FC = () => {
         })),
       });
       setShowPRModal(false);
-      setPrForm({ projectId: '', requestNo: '', note: '' });
+      setPrForm({ projectId: '', projectItemId: '', projectTaskId: '', requestNo: '', note: '' });
       setPrItems([{ materialId: '', unitId: '', quantity: '', note: '' }]);
       alert('Tạo phiếu yêu cầu vật tư thành công!');
       loadData();
@@ -216,19 +319,35 @@ export const ProcurementPage: React.FC = () => {
     }
     setSubmitting(true);
     try {
+      const rawItemsTotal = validItems.reduce((sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0), 0);
+      const shippingFeeNum = Number(poForm.shippingFee) || 0;
+      const poSubtotal = rawItemsTotal + shippingFeeNum;
+      const vatRateNum = (poForm.vatOption === 'NONE' || poForm.vatOption === '0') ? 0 : Number(poForm.vatOption);
+      const poVatAmount = Math.round(poSubtotal * (vatRateNum / 100));
+      const poGrandTotal = poSubtotal + poVatAmount;
+
       await procurementApi.createPurchaseOrder({
         projectId: Number(poForm.projectId),
         supplierId: Number(poForm.supplierId),
         poNo: poForm.poNo.trim() || undefined,
         poDate: poForm.poDate || undefined,
-        note: poForm.note.trim() || undefined,
-        vatRate: 10,
+        note: [
+          poForm.note.trim(),
+          shippingFeeNum > 0 ? `Tiền xe bơm/vận chuyển: ${formatCurrency(shippingFeeNum)} (${poForm.shippingNote || 'Ca xe bơm bê tông/vận chuyển'})` : '',
+          vatRateNum === 0 ? 'Đơn hàng không chịu thuế VAT / Mua lẻ' : ''
+        ].filter(Boolean).join(' | ') || undefined,
+        vatRate: vatRateNum,
+        vatAmount: poVatAmount,
+        amountBeforeTax: poSubtotal,
+        totalAmount: poGrandTotal,
         invoiceNo: poForm.invoiceNo.trim() || undefined,
         invoiceDate: poForm.invoiceDate || undefined,
-        invoiceStatus: poForm.invoiceStatus || 'PENDING',
+        invoiceStatus: (poForm.vatOption === 'NONE' || poForm.vatOption === '0') ? 'NOT_REQUIRED' : poForm.invoiceStatus,
         paymentMethod: poForm.paymentMethod || undefined,
         deliveryDate: poForm.deliveryDate || undefined,
         items: validItems.map(it => ({
+          projectItemId: poForm.projectItemId ? Number(poForm.projectItemId) : undefined,
+          projectTaskId: poForm.projectTaskId ? Number(poForm.projectTaskId) : undefined,
           materialId: Number(it.materialId),
           unitId: Number(it.unitId) || 1,
           quantity: Number(it.quantity),
@@ -236,7 +355,11 @@ export const ProcurementPage: React.FC = () => {
         })),
       });
       setShowPOModal(false);
-      setPoForm({ projectId: '', supplierId: '', poNo: '', poDate: '', note: '', invoiceNo: '', invoiceDate: '', invoiceStatus: 'PENDING', paymentMethod: '', deliveryDate: '' });
+      setPoForm({
+        projectId: '', projectItemId: '', projectTaskId: '', supplierId: '', poNo: '', poDate: '', note: '',
+        invoiceNo: '', invoiceDate: '', invoiceStatus: 'PENDING', paymentMethod: '', deliveryDate: '',
+        vatOption: '10', shippingFee: '', shippingNote: '',
+      });
       setPoItems([{ materialId: '', unitId: '', quantity: '', unitPrice: '' }]);
       alert('Tạo đơn đặt hàng PO thành công!');
       loadData();
@@ -263,7 +386,12 @@ export const ProcurementPage: React.FC = () => {
   const updatePOItem = (i: number, field: keyof POItem, val: any) =>
     setPoItems(prev => prev.map((it, idx) => idx === i ? { ...it, [field]: val } : it));
 
-  const poTotalBeforeTax = poItems.reduce((sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0), 0);
+  const rawItemsTotal = poItems.reduce((sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0), 0);
+  const shippingFeeNum = Number(poForm.shippingFee) || 0;
+  const poSubtotal = rawItemsTotal + shippingFeeNum;
+  const vatRateNum = (poForm.vatOption === 'NONE' || poForm.vatOption === '0') ? 0 : Number(poForm.vatOption);
+  const poVatAmount = Math.round(poSubtotal * (vatRateNum / 100));
+  const poGrandTotal = poSubtotal + poVatAmount;
 
   return (
     <div>
@@ -329,6 +457,14 @@ export const ProcurementPage: React.FC = () => {
                     </td>
                     <td>
                       <div style={{ display: 'flex', gap: '6px' }}>
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => handleViewPRDetail(r)}
+                          title="Xem chi tiết danh mục vật tư đề xuất & thẩm định dòng tiền"
+                          style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
+                        >
+                          <Eye size={13} /> Chi Tiết
+                        </button>
                         {r.status === 'DRAFT' && (
                           <button
                             className="btn btn-secondary btn-sm"
@@ -435,15 +571,25 @@ export const ProcurementPage: React.FC = () => {
                       </span>
                     </td>
                     <td>
-                      {['SUBMITTED', 'DRAFT'].includes(o.status) && (
+                      <div style={{ display: 'flex', gap: '6px' }}>
                         <button
-                          className="btn btn-success btn-sm"
-                          onClick={() => handleApproveOrder(o.id)}
-                          title="Phê duyệt đơn PO"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => handleViewPODetail(o)}
+                          title="Xem chi tiết đơn hàng PO & tiến độ dòng tiền"
+                          style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
                         >
-                          <Check size={13} /> Duyệt PO
+                          <Eye size={13} /> Chi Tiết
                         </button>
-                      )}
+                        {['SUBMITTED', 'DRAFT'].includes(o.status) && (
+                          <button
+                            className="btn btn-success btn-sm"
+                            onClick={() => handleApproveOrder(o.id)}
+                            title="Phê duyệt đơn PO"
+                          >
+                            <Check size={13} /> Duyệt PO
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -583,22 +729,55 @@ export const ProcurementPage: React.FC = () => {
               <button className="btn btn-secondary btn-sm" onClick={() => setShowPRModal(false)}><X size={16} /></button>
             </div>
             <form onSubmit={handleCreatePR}>
-              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '16px' }}>
-                <div className="form-group">
-                  <label className="form-label">Công Trình / Dự Án *</label>
-                  <select className="form-select" value={prForm.projectId} onChange={(e) => setPrForm({ ...prForm, projectId: e.target.value })} required>
+              {/* WBS Cascading Selectors */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label">1. Công Trình / Dự Án *</label>
+                  <select
+                    className="form-select"
+                    value={prForm.projectId}
+                    onChange={(e) => handlePRProjectChange(e.target.value)}
+                    required
+                  >
                     <option value="">-- Chọn dự án --</option>
                     {projects.map(p => <option key={p.id} value={p.id}>[{p.code}] {p.name}</option>)}
                   </select>
                 </div>
-                <div className="form-group">
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label">2. Hạng Mục Công Trình</label>
+                  <select
+                    className="form-select"
+                    value={prForm.projectItemId}
+                    onChange={(e) => handlePRItemChange(e.target.value)}
+                    disabled={!prForm.projectId}
+                  >
+                    <option value="">-- Chọn hạng mục --</option>
+                    {prItemsList.map(it => <option key={it.id} value={it.id}>[{it.code}] {it.name}</option>)}
+                  </select>
+                </div>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label">3. Công Tác Sử Dụng</label>
+                  <select
+                    className="form-select"
+                    value={prForm.projectTaskId}
+                    onChange={(e) => setPrForm(prev => ({ ...prev, projectTaskId: e.target.value }))}
+                    disabled={!prForm.projectItemId}
+                  >
+                    <option value="">-- Toàn bộ hạng mục --</option>
+                    {prTasksList.map(t => <option key={t.id} value={t.id}>[{t.code}] {t.name}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '14px', marginBottom: '14px' }}>
+                <div className="form-group" style={{ margin: 0 }}>
                   <label className="form-label">Số Phiếu Y/C</label>
                   <input type="text" className="form-input" value={prForm.requestNo} onChange={(e) => setPrForm({ ...prForm, requestNo: e.target.value })} placeholder="VD: PR-2026-001" />
                 </div>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Ghi Chú</label>
-                <input type="text" className="form-input" value={prForm.note} onChange={(e) => setPrForm({ ...prForm, note: e.target.value })} placeholder="Ghi chú yêu cầu đặc biệt, thời gian cần giao..." />
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label">Ghi Chú Yêu Cầu</label>
+                  <input type="text" className="form-input" value={prForm.note} onChange={(e) => setPrForm({ ...prForm, note: e.target.value })} placeholder="Ghi chú yêu cầu đặc biệt, vị trí tập kết..." />
+                </div>
               </div>
 
               {/* Items */}
@@ -707,51 +886,123 @@ export const ProcurementPage: React.FC = () => {
               <button className="btn btn-secondary btn-sm" onClick={() => setShowPOModal(false)}><X size={16} /></button>
             </div>
             <form onSubmit={handleCreatePO}>
-              <div style={{ display: 'grid', gridTemplateColumns: '2fr 2fr 1fr 1fr', gap: '16px' }}>
-                <div className="form-group">
-                  <label className="form-label">Công Trình *</label>
-                  <select className="form-select" value={poForm.projectId} onChange={(e) => setPoForm({ ...poForm, projectId: e.target.value })} required>
+              {/* WBS Cascading Selectors */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label">1. Công Trình / Dự Án *</label>
+                  <select
+                    className="form-select"
+                    value={poForm.projectId}
+                    onChange={(e) => handlePOProjectChange(e.target.value)}
+                    required
+                  >
                     <option value="">-- Chọn dự án --</option>
                     {projects.map(p => <option key={p.id} value={p.id}>[{p.code}] {p.name}</option>)}
                   </select>
                 </div>
-                <div className="form-group">
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label">2. Hạng Mục Công Trình</label>
+                  <select
+                    className="form-select"
+                    value={poForm.projectItemId}
+                    onChange={(e) => handlePOItemChange(e.target.value)}
+                    disabled={!poForm.projectId}
+                  >
+                    <option value="">-- Chọn hạng mục --</option>
+                    {poItemsList.map(it => <option key={it.id} value={it.id}>[{it.code}] {it.name}</option>)}
+                  </select>
+                </div>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label">3. Công Tác Sử Dụng</label>
+                  <select
+                    className="form-select"
+                    value={poForm.projectTaskId}
+                    onChange={(e) => setPoForm(prev => ({ ...prev, projectTaskId: e.target.value }))}
+                    disabled={!poForm.projectItemId}
+                  >
+                    <option value="">-- Toàn bộ hạng mục --</option>
+                    {poTasksList.map(t => <option key={t.id} value={t.id}>[{t.code}] {t.name}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+                <div className="form-group" style={{ margin: 0 }}>
                   <label className="form-label">Nhà Cung Cấp *</label>
                   <select className="form-select" value={poForm.supplierId} onChange={(e) => setPoForm({ ...poForm, supplierId: e.target.value })} required>
                     <option value="">-- Chọn NCC --</option>
                     {suppliers.map(s => <option key={s.id} value={s.id}>[{s.code}] {s.name}</option>)}
                   </select>
                 </div>
-                <div className="form-group">
+                <div className="form-group" style={{ margin: 0 }}>
                   <label className="form-label">Số PO</label>
                   <input type="text" className="form-input" value={poForm.poNo} onChange={(e) => setPoForm({ ...poForm, poNo: e.target.value })} placeholder="PO-2026-001" />
                 </div>
-                <div className="form-group">
+                <div className="form-group" style={{ margin: 0 }}>
                   <label className="form-label">Ngày Đặt Hàng</label>
                   <input type="date" className="form-input" value={poForm.poDate} onChange={(e) => setPoForm({ ...poForm, poDate: e.target.value })} />
                 </div>
               </div>
 
-              {/* === Thông tin Hóa đơn & Thanh toán === */}
+              {/* === Thông tin Hóa đơn & Thuế VAT === */}
               <div style={{ background: 'var(--bg-tertiary)', borderRadius: '8px', padding: '14px 16px', marginBottom: '16px', border: '1px solid var(--border-color)' }}>
-                <p style={{ margin: '0 0 12px', fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)' }}>📋 Thông Tin Hóa Đơn &amp; Thanh Toán</p>
-                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: '12px' }}>
+                <p style={{ margin: '0 0 12px', fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)' }}>📋 Thuế Suất VAT &amp; Hóa Đơn Chứng Từ</p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr', gap: '12px' }}>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label">Chính Sách Thuế VAT *</label>
+                    <select
+                      className="form-select"
+                      value={poForm.vatOption}
+                      onChange={(e) => {
+                        const opt = e.target.value;
+                        setPoForm(prev => ({
+                          ...prev,
+                          vatOption: opt,
+                          invoiceStatus: (opt === 'NONE' || opt === '0') ? 'NOT_REQUIRED' : prev.invoiceStatus
+                        }));
+                      }}
+                    >
+                      <option value="10">10% - Hóa đơn GTGT 10% (Thép, xi măng, bê tông...)</option>
+                      <option value="8">8% - Hóa đơn GTGT 8% (Chính sách ưu đãi giảm thuế)</option>
+                      <option value="0">0% - Thuế suất 0%</option>
+                      <option value="NONE">Không có thuế (0%) - Mua lẻ / Hộ kinh doanh / Không HĐ</option>
+                    </select>
+                  </div>
                   <div className="form-group" style={{ margin: 0 }}>
                     <label className="form-label">Số Hóa Đơn VAT</label>
-                    <input type="text" className="form-input" value={poForm.invoiceNo} onChange={(e) => setPoForm({ ...poForm, invoiceNo: e.target.value })} placeholder="VD: 1C26TLP.122" />
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={poForm.invoiceNo}
+                      onChange={(e) => setPoForm({ ...poForm, invoiceNo: e.target.value })}
+                      placeholder="VD: 1C26TLP.122"
+                      disabled={poForm.vatOption === 'NONE'}
+                    />
                   </div>
                   <div className="form-group" style={{ margin: 0 }}>
                     <label className="form-label">Ngày Hóa Đơn</label>
-                    <input type="date" className="form-input" value={poForm.invoiceDate} onChange={(e) => setPoForm({ ...poForm, invoiceDate: e.target.value })} />
+                    <input
+                      type="date"
+                      className="form-input"
+                      value={poForm.invoiceDate}
+                      onChange={(e) => setPoForm({ ...poForm, invoiceDate: e.target.value })}
+                      disabled={poForm.vatOption === 'NONE'}
+                    />
                   </div>
                   <div className="form-group" style={{ margin: 0 }}>
                     <label className="form-label">Trạng Thái HĐ</label>
-                    <select className="form-select" value={poForm.invoiceStatus} onChange={(e) => setPoForm({ ...poForm, invoiceStatus: e.target.value })}>
+                    <select
+                      className="form-select"
+                      value={poForm.invoiceStatus}
+                      onChange={(e) => setPoForm({ ...poForm, invoiceStatus: e.target.value })}
+                    >
                       <option value="PENDING">⏳ Chờ hóa đơn</option>
                       <option value="RECEIVED">✅ Đã nhận HĐ</option>
                       <option value="NOT_REQUIRED">➖ Không cần HĐ</option>
                     </select>
                   </div>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 2fr', gap: '12px', marginTop: '12px' }}>
                   <div className="form-group" style={{ margin: 0 }}>
                     <label className="form-label">Hình Thức TT</label>
                     <select className="form-select" value={poForm.paymentMethod} onChange={(e) => setPoForm({ ...poForm, paymentMethod: e.target.value })}>
@@ -760,15 +1011,47 @@ export const ProcurementPage: React.FC = () => {
                       <option value="CASH">💵 Tiền mặt</option>
                     </select>
                   </div>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 3fr', gap: '12px', marginTop: '12px' }}>
                   <div className="form-group" style={{ margin: 0 }}>
                     <label className="form-label">Ngày Giao Hàng TT</label>
                     <input type="date" className="form-input" value={poForm.deliveryDate} onChange={(e) => setPoForm({ ...poForm, deliveryDate: e.target.value })} />
                   </div>
                   <div className="form-group" style={{ margin: 0 }}>
                     <label className="form-label">Ghi Chú PO</label>
-                    <input type="text" className="form-input" value={poForm.note} onChange={(e) => setPoForm({ ...poForm, note: e.target.value })} placeholder="Điều kiện đặc biệt, tình trạng thực tế nhận hàng..." />
+                    <input type="text" className="form-input" value={poForm.note} onChange={(e) => setPoForm({ ...poForm, note: e.target.value })} placeholder="Điều kiện đặc biệt, vị trí nhận hàng công trường..." />
+                  </div>
+                </div>
+              </div>
+
+              {/* === Chi phí Dịch vụ Xe bơm bê tông / Vận chuyển đi kèm === */}
+              <div style={{ background: '#f8fafc', borderRadius: '8px', padding: '14px 16px', marginBottom: '16px', border: '1px solid #e2e8f0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <span style={{ fontWeight: 700, fontSize: '13px', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Truck size={16} color="var(--brand-500)" />
+                    <span>Chi Phí Xe Bơm Bê Tông &amp; Vận Chuyển Đi Kèm (Nếu có)</span>
+                  </span>
+                  <span style={{ fontSize: '11px', color: '#64748b' }}>Ví dụ: Ca xe bơm cần 37m/52m, xe bơm tĩnh, phụ phí cước bồn...</span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '12px' }}>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontSize: '12px' }}>Nội dung chi phí xe bơm / vận chuyển</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={poForm.shippingNote}
+                      onChange={(e) => setPoForm({ ...poForm, shippingNote: e.target.value })}
+                      placeholder="VD: Ca xe bơm cần 37m đổ bê tông đài móng BT-C1 (2 ca)"
+                    />
+                  </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontSize: '12px' }}>Tiền xe bơm / cước xe (VNĐ)</label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={poForm.shippingFee}
+                      onChange={(e) => setPoForm({ ...poForm, shippingFee: e.target.value })}
+                      placeholder="VD: 3500000"
+                      min="0"
+                    />
                   </div>
                 </div>
               </div>
@@ -862,11 +1145,40 @@ export const ProcurementPage: React.FC = () => {
                     </tbody>
                     <tfoot>
                       <tr style={{ borderTop: '2px solid var(--border-color)', backgroundColor: 'var(--bg-tertiary)' }}>
-                        <td colSpan={4} style={{ padding: '10px 10px', textAlign: 'right', fontWeight: 700, fontSize: '13px' }}>
-                          Tổng Giá Trị PO (chưa VAT):
+                        <td colSpan={4} style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 600, fontSize: '13px' }}>
+                          Tiền hàng vật tư:
                         </td>
-                        <td style={{ padding: '10px 10px', textAlign: 'right', fontWeight: 800, fontSize: '14px', color: 'var(--orange-primary)' }}>
-                          {formatCurrency(poTotalBeforeTax)}
+                        <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, fontSize: '13px' }}>
+                          {formatCurrency(rawItemsTotal)}
+                        </td>
+                        <td></td>
+                      </tr>
+                      {shippingFeeNum > 0 && (
+                        <tr style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+                          <td colSpan={4} style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 600, fontSize: '13px', color: '#0284c7' }}>
+                            Tiền xe bơm bê tông / vận chuyển:
+                          </td>
+                          <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, fontSize: '13px', color: '#0284c7' }}>
+                            +{formatCurrency(shippingFeeNum)}
+                          </td>
+                          <td></td>
+                        </tr>
+                      )}
+                      <tr style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+                        <td colSpan={4} style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 600, fontSize: '13px' }}>
+                          Tiền thuế GTGT ({vatRateNum > 0 ? `${vatRateNum}%` : '0% - Không thuế'}):
+                        </td>
+                        <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, fontSize: '13px', color: '#64748b' }}>
+                          {formatCurrency(poVatAmount)}
+                        </td>
+                        <td></td>
+                      </tr>
+                      <tr style={{ backgroundColor: '#fff7ed', borderTop: '1.5px solid var(--brand-500)' }}>
+                        <td colSpan={4} style={{ padding: '10px 10px', textAlign: 'right', fontWeight: 800, fontSize: '14px', color: 'var(--brand-600)' }}>
+                          TỔNG TIỀN THANH TOÁN ĐƠN ĐẶT HÀNG (PO):
+                        </td>
+                        <td style={{ padding: '10px 10px', textAlign: 'right', fontWeight: 900, fontSize: '16px', color: 'var(--brand-600)' }}>
+                          {formatCurrency(poGrandTotal)}
                         </td>
                         <td></td>
                       </tr>
@@ -883,6 +1195,29 @@ export const ProcurementPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Detail Modals for Director Review */}
+      <PRDetailModal
+        isOpen={showPRDetailModal}
+        onClose={() => {
+          setShowPRDetailModal(false);
+          setSelectedPR(null);
+        }}
+        request={selectedPR}
+        onApprove={handleApproveRequest}
+        onReject={handleRejectRequest}
+        onSubmitForApproval={handleSubmitRequest}
+      />
+
+      <PODetailModal
+        isOpen={showPODetailModal}
+        onClose={() => {
+          setShowPODetailModal(false);
+          setSelectedPO(null);
+        }}
+        order={selectedPO}
+        onApprove={handleApproveOrder}
+      />
     </div>
   );
 };
