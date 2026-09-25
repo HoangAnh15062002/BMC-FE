@@ -6,16 +6,24 @@ function toCamelCase(str: string): string {
 }
 
 function transformKeys(data: any): any {
+  if (
+    data === null ||
+    typeof data !== 'object' ||
+    data instanceof Date ||
+    data instanceof File ||
+    data instanceof Blob ||
+    data instanceof ArrayBuffer ||
+    data instanceof FormData
+  ) {
+    return data;
+  }
   if (Array.isArray(data)) {
     return data.map(transformKeys);
   }
-  if (data !== null && typeof data === 'object' && !(data instanceof Date) && !(data instanceof File)) {
-    return Object.keys(data).reduce((acc: any, key) => {
-      acc[toCamelCase(key)] = transformKeys(data[key]);
-      return acc;
-    }, {});
-  }
-  return data;
+  return Object.keys(data).reduce((acc: any, key) => {
+    acc[toCamelCase(key)] = transformKeys(data[key]);
+    return acc;
+  }, {});
 }
 
 const apiClient = axios.create({
@@ -41,6 +49,14 @@ apiClient.interceptors.request.use(
 // Response Interceptor: Transform snake_case → camelCase + Catch 401
 apiClient.interceptors.response.use(
   (response) => {
+    if (
+      response.config.responseType === 'blob' ||
+      response.config.responseType === 'arraybuffer' ||
+      response.data instanceof Blob ||
+      response.data instanceof ArrayBuffer
+    ) {
+      return response;
+    }
     response.data = transformKeys(response.data);
     return response;
   },

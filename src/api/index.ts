@@ -134,14 +134,23 @@ export const estimateApi = {
     const res = await apiClient.get(`/projects/${projectId}/estimate-versions/${id}/export-excel`, {
       responseType: 'blob',
     });
-    const blob = new Blob([res.data], {
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    });
+    const blob = res.data instanceof Blob 
+      ? res.data 
+      : new Blob([res.data], {
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
+    const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.href = window.URL.createObjectURL(blob);
-    link.download = filename;
+    link.href = url;
+    link.download = filename.endsWith('.xlsx') ? filename : `${filename}.xlsx`;
+    document.body.appendChild(link);
     link.click();
-    window.URL.revokeObjectURL(link.href);
+    setTimeout(() => {
+      if (document.body.contains(link)) {
+        document.body.removeChild(link);
+      }
+      window.URL.revokeObjectURL(url);
+    }, 1000);
   },
 };
 
