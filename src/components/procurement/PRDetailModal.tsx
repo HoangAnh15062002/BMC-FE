@@ -182,10 +182,31 @@ export const PRDetailModal: React.FC<PRDetailModalProps> = ({
     const note = request.note || '';
     const statusText = getPurchaseStatusLabel(request.status);
 
-    const now = new Date();
-    const day = String(now.getDate()).padStart(2, '0');
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const year = now.getFullYear();
+    // Ngày ký / Ngày phê duyệt: Lấy ngày thực tế phiếu đã được duyệt (ApprovedAt) nếu đã duyệt
+    let approvalDateFormatted = '';
+    const dateSource = request.approvedAt 
+      || (request as any).approvalDate 
+      || (request as any).approvedDate 
+      || (request.status === 'APPROVED' ? (request.requestDate || request.createdAt) : null);
+
+    if (dateSource) {
+      const parsed = new Date(dateSource);
+      if (!isNaN(parsed.getTime())) {
+        const d = String(parsed.getDate()).padStart(2, '0');
+        const m = String(parsed.getMonth() + 1).padStart(2, '0');
+        const y = parsed.getFullYear();
+        approvalDateFormatted = `Ngày ${d} tháng ${m} năm ${y}`;
+      }
+    }
+
+    if (!approvalDateFormatted) {
+      if (request.status === 'APPROVED') {
+        const now = new Date();
+        approvalDateFormatted = `Ngày ${String(now.getDate()).padStart(2, '0')} tháng ${String(now.getMonth() + 1).padStart(2, '0')} năm ${now.getFullYear()}`;
+      } else {
+        approvalDateFormatted = 'Ngày ..... tháng ..... năm 20...';
+      }
+    }
 
     const vatLabel = (vatOption === 'NONE' || vatOption === '0') ? 'Không tính thuế' : `Thuế VAT (${vatOption}%)`;
 
@@ -431,7 +452,7 @@ export const PRDetailModal: React.FC<PRDetailModalProps> = ({
         </table>
 
         <div class="signatures-container">
-          <div class="date-location">Ngày ${day} tháng ${month} năm ${year}</div>
+          <div class="date-location">${approvalDateFormatted}</div>
           <table class="sig-table">
             <tr>
               <td>

@@ -160,6 +160,7 @@ export interface PurchaseRequest {
   requestedByName?: string;
   createdByName?: string;
   approvedByName?: string;
+  approvedAt?: string;
   itemsCount?: number;
   totalEstimatedAmount?: number;
   createdAt: string;
