@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { siteApi, projectApi } from '../api';
 import { ProjectVariation, Project } from '../types';
 import { formatCurrency, formatDate } from '../utils/formatters';
-import { GitPullRequestDraft, Plus, Check, X, TrendingUp, TrendingDown } from 'lucide-react';
+import { GitPullRequestDraft, Plus, Check, X, TrendingUp, TrendingDown, Eye } from 'lucide-react';
+import { VariationDetailModal } from '../components/variations/VariationDetailModal';
 
 interface VariationItem {
   description: string;
@@ -15,6 +16,10 @@ export const VariationsPage: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<number | undefined>();
   const [loading, setLoading] = useState(true);
+
+  // Modal: View & Approve Variation Detail
+  const [selectedVariation, setSelectedVariation] = useState<ProjectVariation | null>(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
 
   // Modal: Create Variation
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -50,17 +55,33 @@ export const VariationsPage: React.FC = () => {
 
   useEffect(() => { loadData(); }, [selectedProjectId]);
 
-  const handleApprove = async (id: number, reqVal: number) => {
-    const approvedValStr = prompt('Nhập giá trị phê duyệt chính thức (VNĐ):', reqVal.toString());
-    if (!approvedValStr) return;
-    const val = Number(approvedValStr);
-    if (isNaN(val)) { alert('Giá trị không hợp lệ'); return; }
+  const handleViewDetail = async (v: ProjectVariation) => {
     try {
-      await siteApi.approveVariation(id, val);
+      const full = await siteApi.getVariationById(v.id);
+      setSelectedVariation(full || v);
+    } catch {
+      setSelectedVariation(v);
+    }
+    setShowDetailModal(true);
+  };
+
+  const handleApprove = async (id: number, approvedVal: number) => {
+    try {
+      await siteApi.approveVariation(id, approvedVal);
       alert('Đã phê duyệt hồ sơ phát sinh thành công!');
       loadData();
     } catch (err: any) {
       alert(err.response?.data?.message || 'Lỗi khi duyệt phát sinh');
+    }
+  };
+
+  const handleReject = async (id: number, reason: string) => {
+    try {
+      await siteApi.rejectVariation(id, reason);
+      alert('Đã từ chối hồ sơ phát sinh.');
+      loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Lỗi khi từ chối phát sinh');
     }
   };
 
@@ -127,9 +148,20 @@ export const VariationsPage: React.FC = () => {
     }
   };
 
+  // Helper to check variation direction
+  const isTypeAddition = (type?: string) => {
+    if (!type) return true;
+    const t = type.toUpperCase();
+    return t === 'ADDITION' || t === 'INCREASE' || t.includes('TĂNG');
+  };
+
   // Summary stats
-  const totalAddition = variations.filter(v => v.variationType === 'ADDITION' && v.status === 'APPROVED').reduce((s, v) => s + (v.approvedValue || 0), 0);
-  const totalDeduction = variations.filter(v => v.variationType === 'DEDUCTION' && v.status === 'APPROVED').reduce((s, v) => s + (v.approvedValue || 0), 0);
+  const totalAddition = variations
+    .filter(v => isTypeAddition(v.variationType) && v.status === 'APPROVED')
+    .reduce((s, v) => s + (v.approvedValue || 0), 0);
+  const totalDeduction = variations
+    .filter(v => !isTypeAddition(v.variationType) && v.status === 'APPROVED')
+    .reduce((s, v) => s + (v.approvedValue || 0), 0);
   const pendingCount = variations.filter(v => v.status !== 'APPROVED').length;
 
   return (
@@ -216,18 +248,20 @@ export const VariationsPage: React.FC = () => {
             </thead>
             <tbody>
               {variations.map((v) => {
-                const isAddition = v.variationType === 'ADDITION';
+                const isAddition = isTypeAddition(v.variationType);
                 const statusCls = v.status === 'APPROVED' ? 'badge-active' : v.status === 'REJECTED' ? 'badge-danger' : 'badge-pending';
                 const statusLabel = v.status === 'APPROVED' ? 'Đã Phê Duyệt' : v.status === 'REJECTED' ? 'Từ Chối' : 'Chờ Duyệt';
 
                 return (
                   <tr key={v.id}>
                     <td>
-                      <span style={{ fontWeight: 700, color: 'var(--blue-tech)' }}>{v.variationNo}</span>
+                      <span style={{ fontWeight: 700, color: 'var(--blue-tech)', cursor: 'pointer' }} onClick={() => handleViewDetail(v)}>
+                        {v.variationNo}
+                      </span>
                     </td>
                     <td style={{ fontWeight: 600 }}>{v.projectName || `Dự án #${v.projectId}`}</td>
                     <td>
-                      <div style={{ fontWeight: 600 }}>{v.title}</div>
+                      <div style={{ fontWeight: 600, cursor: 'pointer' }} onClick={() => handleViewDetail(v)}>{v.title}</div>
                       {v.reason && <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Lý do: {v.reason}</div>}
                     </td>
                     <td>
@@ -238,19 +272,30 @@ export const VariationsPage: React.FC = () => {
                     <td>{formatDate(v.requestedDate || v.createdAt)}</td>
                     <td style={{ fontWeight: 600 }}>{formatCurrency(v.requestedValue)}</td>
                     <td style={{ fontWeight: 800, color: isAddition ? 'var(--crimson-danger)' : 'var(--emerald-success)' }}>
-                      {v.approvedValue !== undefined && v.approvedValue !== null ? formatCurrency(v.approvedValue) : '-'}
+                      {v.approvedValue !== undefined && v.approvedValue !== null && v.approvedValue > 0 ? formatCurrency(v.approvedValue) : '-'}
                     </td>
                     <td><span className={`badge ${statusCls}`}>{statusLabel}</span></td>
                     <td>
-                      {v.status !== 'APPROVED' && (
+                      <div style={{ display: 'flex', gap: '6px' }}>
                         <button
-                          className="btn btn-success btn-sm"
-                          onClick={() => handleApprove(v.id, v.requestedValue)}
-                          title="Phê duyệt giá trị phát sinh"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => handleViewDetail(v)}
+                          title="Xem chi tiết bóc tách khối lượng phát sinh"
+                          style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
                         >
-                          <Check size={13} /> Duyệt
+                          <Eye size={13} /> Chi Tiết
                         </button>
-                      )}
+                        {v.status !== 'APPROVED' && (
+                          <button
+                            className="btn btn-success btn-sm"
+                            onClick={() => handleViewDetail(v)}
+                            title="Xem và phê duyệt giá trị phát sinh"
+                            style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
+                          >
+                            <Check size={13} /> Duyệt
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -423,6 +468,17 @@ export const VariationsPage: React.FC = () => {
           </div>
         </div>
       )}
+      {/* Detail Modal for Variation */}
+      <VariationDetailModal
+        isOpen={showDetailModal}
+        onClose={() => {
+          setShowDetailModal(false);
+          setSelectedVariation(null);
+        }}
+        variation={selectedVariation}
+        onApprove={handleApprove}
+        onReject={handleReject}
+      />
     </div>
   );
 };

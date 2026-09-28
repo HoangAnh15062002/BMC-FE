@@ -344,12 +344,20 @@ export const siteApi = {
     const res = await apiClient.get<any>('/variations', { params: { projectId, status } });
     return ensureArray<ProjectVariation>(res.data);
   },
+  getVariationById: async (id: number) => {
+    const res = await apiClient.get<ProjectVariation>(`/variations/${id}`);
+    return res.data;
+  },
   createVariation: async (data: any) => {
     const res = await apiClient.post<ProjectVariation>('/variations', data);
     return res.data;
   },
   approveVariation: async (id: number, approvedValue: number) => {
     const res = await apiClient.post(`/variations/${id}/approve`, { approvedValue });
+    return res.data;
+  },
+  rejectVariation: async (id: number, reason?: string) => {
+    const res = await apiClient.post(`/variations/${id}/reject`, { reason });
     return res.data;
   },
 };

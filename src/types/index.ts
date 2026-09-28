@@ -328,6 +328,21 @@ export interface ActualSiteCost {
   description: string;
 }
 
+export interface ProjectVariationItem {
+  id?: number;
+  projectVariationId?: number;
+  projectItemId?: number;
+  projectItemName?: string;
+  projectTaskId?: number;
+  projectTaskName?: string;
+  description: string;
+  quantity?: number;
+  unitId?: number;
+  unitCode?: string;
+  unitPrice?: number;
+  amount: number;
+}
+
 export interface ProjectVariation {
   id: number;
   projectId: number;
@@ -339,9 +354,12 @@ export interface ProjectVariation {
   status: string;
   requestedValue: number;
   approvedValue?: number;
+  approvedDate?: string;
   reason?: string;
   requestedDate?: string;
   createdAt: string;
+  createdByName?: string;
+  items?: ProjectVariationItem[];
 }
 
 export interface ProjectAlert {
