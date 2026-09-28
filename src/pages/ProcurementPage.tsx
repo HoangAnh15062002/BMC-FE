@@ -36,7 +36,7 @@ export const ProcurementPage: React.FC = () => {
 
   // Modal: Create Purchase Request
   const [showPRModal, setShowPRModal] = useState(false);
-  const [prForm, setPrForm] = useState({ projectId: '', projectItemId: '', projectTaskId: '', requestNo: '', note: '' });
+  const [prForm, setPrForm] = useState({ projectId: '', projectItemId: '', projectTaskId: '', requestNo: '', note: '', vatOption: 'NONE' });
   const [prItemsList, setPrItemsList] = useState<any[]>([]);
   const [prTasksList, setPrTasksList] = useState<any[]>([]);
   const [prItems, setPrItems] = useState<PRItem[]>([
@@ -277,10 +277,15 @@ export const ProcurementPage: React.FC = () => {
     }
     setSubmitting(true);
     try {
+      const vatNote = prForm.vatOption === 'NONE' || prForm.vatOption === '0'
+        ? '[VAT:0] Không tính thuế VAT'
+        : `[VAT:${prForm.vatOption}] Có thuế GTGT ${prForm.vatOption}%`;
+      const combinedNote = [prForm.note.trim(), vatNote].filter(Boolean).join(' | ');
+
       await procurementApi.createPurchaseRequest({
         projectId: Number(prForm.projectId),
         requestNo: prForm.requestNo.trim() || undefined,
-        note: prForm.note.trim() || undefined,
+        note: combinedNote || undefined,
         items: validItems.map(it => ({
           projectItemId: prForm.projectItemId ? Number(prForm.projectItemId) : undefined,
           projectTaskId: prForm.projectTaskId ? Number(prForm.projectTaskId) : undefined,
@@ -291,7 +296,7 @@ export const ProcurementPage: React.FC = () => {
         })),
       });
       setShowPRModal(false);
-      setPrForm({ projectId: '', projectItemId: '', projectTaskId: '', requestNo: '', note: '' });
+      setPrForm({ projectId: '', projectItemId: '', projectTaskId: '', requestNo: '', note: '', vatOption: 'NONE' });
       setPrItems([{ materialId: '', unitId: '', quantity: '', note: '' }]);
       alert('Tạo phiếu yêu cầu vật tư thành công!');
       loadData();
@@ -769,10 +774,22 @@ export const ProcurementPage: React.FC = () => {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '14px', marginBottom: '14px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.5fr', gap: '14px', marginBottom: '14px' }}>
                 <div className="form-group" style={{ margin: 0 }}>
                   <label className="form-label">Số Phiếu Y/C</label>
                   <input type="text" className="form-input" value={prForm.requestNo} onChange={(e) => setPrForm({ ...prForm, requestNo: e.target.value })} placeholder="VD: PR-2026-001" />
+                </div>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label">Thuế GTGT (VAT)</label>
+                  <select
+                    className="form-select"
+                    value={prForm.vatOption}
+                    onChange={(e) => setPrForm({ ...prForm, vatOption: e.target.value })}
+                  >
+                    <option value="NONE">Không tính thuế (0%)</option>
+                    <option value="10">Có thuế VAT (10%)</option>
+                    <option value="8">Có thuế VAT (8%)</option>
+                  </select>
                 </div>
                 <div className="form-group" style={{ margin: 0 }}>
                   <label className="form-label">Ghi Chú Yêu Cầu</label>

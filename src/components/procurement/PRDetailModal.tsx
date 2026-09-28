@@ -115,18 +115,36 @@ export const PRDetailModal: React.FC<PRDetailModalProps> = ({
 
   const totalQuantity = items.reduce((sum, it) => sum + (Number(it.quantity) || 0), 0);
   const totalEstimatedAmount = items.reduce((sum, it) => sum + (it.totalPrice || 0), 0);
+
+  // User/Creator VAT Option: Can be NONE (0%), 8%, or 10%
+  const [vatOption, setVatOption] = useState<string>(() => {
+    const note = (request?.note || '').toUpperCase();
+    if (note.includes('[VAT:10]') || note.includes('VAT 10%') || note.includes('THUẾ 10%')) return '10';
+    if (note.includes('[VAT:8]') || note.includes('VAT 8%') || note.includes('THUẾ 8%')) return '8';
+    if (note.includes('[VAT:0]') || note.includes('KHÔNG TÍNH THUẾ') || note.includes('KHÔNG CÓ THUẾ') || note.includes('CHƯA GỒM VAT')) return 'NONE';
+    if ((request as any)?.vatRate !== undefined) {
+      const r = Number((request as any).vatRate);
+      return r > 0 ? r.toString() : 'NONE';
+    }
+    // Default to NONE (Không có thuế)
+    return 'NONE';
+  });
+
+  const vatRate = (vatOption === 'NONE' || vatOption === '0') ? 0 : Number(vatOption);
+  const vatAmount = Math.round(totalEstimatedAmount * (vatRate / 100));
+  const totalWithVat = totalEstimatedAmount + vatAmount;
   
   // Executive Budget Simulation for Director
-  const taskBudgetTotal = Math.round(totalEstimatedAmount * 1.4); // Dự toán được duyệt cho công tác này
-  const taskAccumulatedSpent = Math.round(totalEstimatedAmount * 0.45); // Lũy kế đã chi mua sắm trước đó
+  const taskBudgetTotal = Math.round(totalWithVat * 1.4); // Dự toán được duyệt cho công tác này
+  const taskAccumulatedSpent = Math.round(totalWithVat * 0.45); // Lũy kế đã chi mua sắm trước đó
   const remainingBudgetBefore = taskBudgetTotal - taskAccumulatedSpent;
-  const remainingBudgetAfter = remainingBudgetBefore - totalEstimatedAmount;
-  const budgetUsagePercent = Math.min(100, Math.round(((taskAccumulatedSpent + totalEstimatedAmount) / taskBudgetTotal) * 100));
+  const remainingBudgetAfter = remainingBudgetBefore - totalWithVat;
+  const budgetUsagePercent = Math.min(100, Math.round(((taskAccumulatedSpent + totalWithVat) / taskBudgetTotal) * 100));
 
   // Cashflow Outflow Timeline Simulation
-  const advancePayment = Math.round(totalEstimatedAmount * 0.3); // 30% Tạm ứng đặt cọc
-  const deliveryPayment = Math.round(totalEstimatedAmount * 0.6); // 60% Khi giao vật tư đến chân công trình
-  const retentionPayment = Math.round(totalEstimatedAmount * 0.1); // 10% Quyết toán & bảo hành
+  const advancePayment = Math.round(totalWithVat * 0.3); // 30% Tạm ứng đặt cọc
+  const deliveryPayment = Math.round(totalWithVat * 0.6); // 60% Khi giao vật tư đến chân công trình
+  const retentionPayment = Math.round(totalWithVat * 0.1); // 10% Quyết toán & bảo hành
 
   const handleApprove = async () => {
     if (onApprove) {
@@ -335,7 +353,10 @@ export const PRDetailModal: React.FC<PRDetailModalProps> = ({
                 Tổng Giá Trị Đề Xuất Chi
               </span>
               <div style={{ fontWeight: 900, color: 'var(--brand-500)', fontSize: '18px', marginTop: '3px' }}>
-                {formatCurrency(totalEstimatedAmount)}
+                {formatCurrency(totalWithVat)}
+              </div>
+              <div style={{ fontSize: '11px', color: vatRate > 0 ? '#ea580c' : '#15803d', marginTop: '2px', fontWeight: 600 }}>
+                {vatRate > 0 ? `Đã gồm thuế VAT (${vatRate}%)` : 'Chưa / Không tính thuế VAT'}
               </div>
             </div>
           </div>
@@ -440,7 +461,7 @@ export const PRDetailModal: React.FC<PRDetailModalProps> = ({
 
           {/* Section: Table of Materials */}
           <div style={{ marginBottom: '24px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: '10px' }}>
               <div>
                 <h3 style={{ fontSize: '15px', fontWeight: 800, margin: 0, color: '#0f172a' }}>
                   Danh Sách Vật Tư Đề Xuất Cung Cấp Chi Tiết ({items.length} mặt hàng)
@@ -449,9 +470,66 @@ export const PRDetailModal: React.FC<PRDetailModalProps> = ({
                   Bao gồm chi tiết: Khối lượng yêu cầu, Đơn giá dự toán & Thành tiền giải ngân dự kiến
                 </span>
               </div>
-              <span className="badge badge-primary no-print" style={{ fontSize: '12px', padding: '4px 10px' }}>
-                Tổng giá trị: {formatCurrency(totalEstimatedAmount)}
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }} className="no-print">
+                {/* VAT Toggle Selector (Có thể có hoặc không thuế) */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', backgroundColor: '#f1f5f9', padding: '3px 6px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
+                  <span style={{ fontSize: '12px', color: '#475569', fontWeight: 700, marginRight: '4px' }}>Thuế VAT:</span>
+                  <button
+                    type="button"
+                    onClick={() => setVatOption('NONE')}
+                    style={{
+                      padding: '4px 10px',
+                      fontSize: '11px',
+                      fontWeight: vatOption === 'NONE' ? 800 : 500,
+                      backgroundColor: vatOption === 'NONE' ? '#ffffff' : 'transparent',
+                      color: vatOption === 'NONE' ? '#0f172a' : '#64748b',
+                      border: 'none',
+                      borderRadius: '5px',
+                      cursor: 'pointer',
+                      boxShadow: vatOption === 'NONE' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
+                    }}
+                  >
+                    Không thuế (0%)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setVatOption('8')}
+                    style={{
+                      padding: '4px 10px',
+                      fontSize: '11px',
+                      fontWeight: vatOption === '8' ? 800 : 500,
+                      backgroundColor: vatOption === '8' ? '#ffffff' : 'transparent',
+                      color: vatOption === '8' ? '#0f172a' : '#64748b',
+                      border: 'none',
+                      borderRadius: '5px',
+                      cursor: 'pointer',
+                      boxShadow: vatOption === '8' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
+                    }}
+                  >
+                    VAT 8%
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setVatOption('10')}
+                    style={{
+                      padding: '4px 10px',
+                      fontSize: '11px',
+                      fontWeight: vatOption === '10' ? 800 : 500,
+                      backgroundColor: vatOption === '10' ? '#ffffff' : 'transparent',
+                      color: vatOption === '10' ? '#0f172a' : '#64748b',
+                      border: 'none',
+                      borderRadius: '5px',
+                      cursor: 'pointer',
+                      boxShadow: vatOption === '10' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
+                    }}
+                  >
+                    VAT 10%
+                  </button>
+                </div>
+                <span className="badge badge-primary" style={{ fontSize: '12px', padding: '5px 12px', fontWeight: 800 }}>
+                  Tổng chi: {formatCurrency(totalWithVat)}
+                </span>
+              </div>
             </div>
 
             <div
@@ -544,24 +622,38 @@ export const PRDetailModal: React.FC<PRDetailModalProps> = ({
                     <td></td>
                   </tr>
 
-                  {/* Summary Row 3: Estimated VAT */}
-                  <tr style={{ backgroundColor: '#ffffff', fontWeight: 700 }}>
-                    <td colSpan={7} style={{ textAlign: 'right', paddingRight: '16px', color: '#64748b', fontSize: '13px' }}>
-                      Dự kiến tiền thuế GTGT (VAT 10% tạm tính):
-                    </td>
-                    <td style={{ textAlign: 'right', fontSize: '14px', color: '#64748b', fontWeight: 700, backgroundColor: '#fffaf5' }}>
-                      +{formatCurrency(Math.round(totalEstimatedAmount * 0.1))}
-                    </td>
-                    <td style={{ fontSize: '11px', color: '#94a3b8', fontStyle: 'italic' }}>Thuế suất 10%</td>
-                  </tr>
+                  {/* Summary Row 3: Estimated VAT (Có hoặc không theo lựa chọn) */}
+                  {vatRate > 0 ? (
+                    <tr style={{ backgroundColor: '#ffffff', fontWeight: 700 }}>
+                      <td colSpan={7} style={{ textAlign: 'right', paddingRight: '16px', color: '#64748b', fontSize: '13px' }}>
+                        Tiền thuế GTGT (VAT {vatRate}%):
+                      </td>
+                      <td style={{ textAlign: 'right', fontSize: '14px', color: '#64748b', fontWeight: 700, backgroundColor: '#fffaf5' }}>
+                        +{formatCurrency(vatAmount)}
+                      </td>
+                      <td style={{ fontSize: '11px', color: '#94a3b8', fontStyle: 'italic' }}>Thuế suất {vatRate}%</td>
+                    </tr>
+                  ) : (
+                    <tr style={{ backgroundColor: '#ffffff', fontWeight: 600 }}>
+                      <td colSpan={7} style={{ textAlign: 'right', paddingRight: '16px', color: '#64748b', fontSize: '13px' }}>
+                        Thuế GTGT (VAT):
+                      </td>
+                      <td style={{ textAlign: 'right', fontSize: '13px', color: '#15803d', fontWeight: 700, backgroundColor: '#fffaf5' }}>
+                        0 ₫ (Không tính thuế)
+                      </td>
+                      <td style={{ fontSize: '11px', color: '#15803d', fontStyle: 'italic' }}>Không áp dụng VAT</td>
+                    </tr>
+                  )}
 
                   {/* Summary Row 4: Grand total after VAT */}
                   <tr style={{ backgroundColor: '#fff7ed', fontWeight: 900, borderTop: '1px solid #fed7aa' }}>
                     <td colSpan={7} style={{ textAlign: 'right', paddingRight: '16px', color: '#c2410c', fontSize: '14px' }}>
-                      TỔNG CỘNG NHU CẦU DÒNG TIỀN ĐỀ XUẤT (ĐÃ GỒM VAT):
+                      {vatRate > 0
+                        ? `TỔNG CỘNG NHU CẦU DÒNG TIỀN ĐỀ XUẤT (ĐÃ GỒM VAT ${vatRate}%):`
+                        : 'TỔNG CỘNG NHU CẦU DÒNG TIỀN ĐỀ XUẤT:'}
                     </td>
                     <td style={{ textAlign: 'right', fontSize: '17px', color: '#ea580c', fontWeight: 900, backgroundColor: '#ffedd5' }}>
-                      {formatCurrency(Math.round(totalEstimatedAmount * 1.1))}
+                      {formatCurrency(totalWithVat)}
                     </td>
                     <td style={{ fontSize: '11px', color: '#9a3412', fontWeight: 700 }}>Đề xuất giải ngân</td>
                   </tr>
