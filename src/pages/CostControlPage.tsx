@@ -142,53 +142,74 @@ export const CostControlPage: React.FC = () => {
           {variance ? (
             <div>
               {/* Stats Grid */}
-              <div className="stats-grid" style={{ marginBottom: '24px' }}>
-                <div className="stat-card">
-                  <div>
-                    <div className="stat-val" style={{ color: 'var(--blue-tech)' }}>
-                      {formatCurrency(variance.totalBudgetCost ?? variance.totalPlannedValue ?? 0)}
-                    </div>
-                    <div className="stat-label">Tổng Ngân Sách Dự Toán (Budget)</div>
-                  </div>
-                </div>
+              {/* Stats Grid */}
+              {(() => {
+                const budgetCost = variance.totalBudgetCost ?? variance.totalPlannedValue ?? 0;
+                const actualCost = variance.totalActualCost ?? 0;
+                const remainingBudget = budgetCost - actualCost;
+                const spentPercent = budgetCost > 0 ? Math.round((actualCost / budgetCost) * 1000) / 10 : 0;
+                const isOverBudget = remainingBudget < 0;
 
-                <div className="stat-card">
-                  <div>
-                    <div className="stat-val" style={{ color: 'var(--orange-primary)' }}>
-                      {formatCurrency(variance.totalActualCost ?? 0)}
+                return (
+                  <div className="stats-grid" style={{ marginBottom: '24px' }}>
+                    <div className="stat-card">
+                      <div>
+                        <div className="stat-val" style={{ color: 'var(--blue-tech)' }}>
+                          {formatCurrency(budgetCost)}
+                        </div>
+                        <div className="stat-label">Tổng Ngân Sách Dự Toán (Budget)</div>
+                        <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>Hạn mức được duyệt ban đầu</div>
+                      </div>
                     </div>
-                    <div className="stat-label">Chi Phí Thực Tế (Actual Cost)</div>
-                  </div>
-                </div>
 
-                <div className="stat-card">
-                  <div>
-                    <div
-                      className="stat-val"
-                      style={{
-                        color: (variance.totalVariance ?? variance.costVariance ?? 0) <= 0 ? 'var(--emerald-success)' : 'var(--crimson-danger)',
-                      }}
-                    >
-                      {formatCurrency(variance.totalVariance ?? variance.costVariance ?? 0)}
+                    <div className="stat-card">
+                      <div>
+                        <div className="stat-val" style={{ color: 'var(--orange-primary)' }}>
+                          {formatCurrency(actualCost)}
+                        </div>
+                        <div className="stat-label">Chi Phí Thực Tế Đã Chi (Actual)</div>
+                        <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>Lũy kế nhân công, máy & vật tư</div>
+                      </div>
                     </div>
-                    <div className="stat-label">Phương Sai Tổng (Variance = AC - BC)</div>
-                  </div>
-                </div>
 
-                <div className="stat-card">
-                  <div>
-                    <div
-                      className="stat-val"
-                      style={{
-                        color: (variance.variancePercent ?? 0) <= 0 ? 'var(--emerald-success)' : 'var(--crimson-danger)',
-                      }}
-                    >
-                      {variance.variancePercent !== undefined ? `${variance.variancePercent}%` : '0%'}
+                    <div className="stat-card">
+                      <div>
+                        <div
+                          className="stat-val"
+                          style={{
+                            color: isOverBudget ? 'var(--crimson-danger)' : 'var(--emerald-success)',
+                          }}
+                        >
+                          {isOverBudget ? `-${formatCurrency(Math.abs(remainingBudget))}` : `+${formatCurrency(remainingBudget)}`}
+                        </div>
+                        <div className="stat-label">
+                          {isOverBudget ? 'Vượt Ngân Sách (Bội Chi)' : 'Ngân Sách Còn Dư (Còn Lại)'}
+                        </div>
+                        <div style={{ fontSize: '11px', color: isOverBudget ? 'var(--crimson-danger)' : 'var(--emerald-success)', marginTop: '2px' }}>
+                          {isOverBudget ? '⚠ Bội chi so với dự toán' : '✓ Nằm trong hạn mức an toàn'}
+                        </div>
+                      </div>
                     </div>
-                    <div className="stat-label">Tỷ Lệ Chênh Lệch (%)</div>
+
+                    <div className="stat-card">
+                      <div>
+                        <div
+                          className="stat-val"
+                          style={{
+                            color: spentPercent > 100 ? 'var(--crimson-danger)' : 'var(--emerald-success)',
+                          }}
+                        >
+                          {spentPercent}%
+                        </div>
+                        <div className="stat-label">Tỷ Lệ Tiêu Hao Ngân Sách</div>
+                        <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                          Đã giải ngân {spentPercent}% tổng mức
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
+                );
+              })()}
 
               {/* Resource Breakdown: Material, Labor, Machine */}
               {(variance.materialSummary || variance.laborSummary || variance.machineSummary) && (
@@ -203,8 +224,8 @@ export const CostControlPage: React.FC = () => {
                           <th>Nhóm Nguồn Lực</th>
                           <th>Ngân Sách Dự Toán</th>
                           <th>Chi Phí Thực Tế</th>
-                          <th>Phương Sai (Chênh Lệch)</th>
-                          <th>Tỷ Lệ (%)</th>
+                          <th>Ngân Sách Còn Dư</th>
+                          <th>Tỷ Lệ Tiêu Hao</th>
                           <th>Đánh Giá</th>
                         </tr>
                       </thead>
@@ -215,17 +236,21 @@ export const CostControlPage: React.FC = () => {
                             const name = r.resourceType === 'MATERIAL' ? 'Vật Liệu Xây Dựng (V)'
                               : r.resourceType === 'LABOR' ? 'Nhân Công Thi Công (N)'
                               : 'Máy & Thiết Bị Thi Công (M)';
-                            const isOver = (r.totalVariance ?? (r.actualCost - r.budgetCost)) > 0;
+                            const bCost = r.budgetCost || 0;
+                            const aCost = r.actualCost || 0;
+                            const rem = bCost - aCost;
+                            const isOver = rem < 0;
+                            const rate = bCost > 0 ? Math.round((aCost / bCost) * 1000) / 10 : 0;
 
                             return (
                               <tr key={idx}>
                                 <td style={{ fontWeight: 700 }}>{name}</td>
-                                <td>{formatCurrency(r.budgetCost)}</td>
-                                <td style={{ fontWeight: 600 }}>{formatCurrency(r.actualCost)}</td>
+                                <td>{formatCurrency(bCost)}</td>
+                                <td style={{ fontWeight: 600 }}>{formatCurrency(aCost)}</td>
                                 <td style={{ fontWeight: 700, color: isOver ? 'var(--crimson-danger)' : 'var(--emerald-success)' }}>
-                                  {formatCurrency(r.totalVariance ?? (r.actualCost - r.budgetCost))}
+                                  {isOver ? `-${formatCurrency(Math.abs(rem))}` : `+${formatCurrency(rem)}`}
                                 </td>
-                                <td>{r.variancePercent || 0}%</td>
+                                <td style={{ fontWeight: 600 }}>{rate}%</td>
                                 <td>
                                   <span className={`badge ${isOver ? 'badge-danger' : 'badge-active'}`}>
                                     {isOver ? 'Vượt Ngân Sách' : 'Trong Định Mức'}
