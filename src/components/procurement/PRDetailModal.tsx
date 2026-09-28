@@ -339,27 +339,27 @@ export const PRDetailModal: React.FC<PRDetailModalProps> = ({
             text-align: center;
           }
           .sig-table td {
-            width: 25%;
+            width: 50%;
             vertical-align: top;
-            padding: 0 4px;
+            padding: 0 20px;
           }
           .sig-role {
             font-weight: bold;
-            font-size: 11px;
+            font-size: 12px;
             text-transform: uppercase;
           }
           .sig-caption {
             font-style: italic;
-            font-size: 10px;
+            font-size: 11px;
             color: #64748b;
-            margin-top: 2px;
+            margin-top: 3px;
           }
           .sig-space {
-            height: 60px;
+            height: 75px;
           }
           .sig-name {
             font-weight: bold;
-            font-size: 11.5px;
+            font-size: 13px;
           }
         </style>
       </head>
@@ -448,25 +448,13 @@ export const PRDetailModal: React.FC<PRDetailModalProps> = ({
             <tr>
               <td>
                 <div class="sig-role">NGƯỜI LẬP PHIẾU</div>
-                <div class="sig-caption">(Ký, ghi rõ họ tên)</div>
+                <div class="sig-caption">(Ký và ghi rõ họ tên)</div>
                 <div class="sig-space"></div>
                 <div class="sig-name">${requester}</div>
               </td>
               <td>
-                <div class="sig-role">PHÒNG QL VẬT TƯ / KHO</div>
-                <div class="sig-caption">(Ký, ghi rõ họ tên)</div>
-                <div class="sig-space"></div>
-                <div class="sig-name">Phòng Cung Ứng Vật Tư</div>
-              </td>
-              <td>
-                <div class="sig-role">CHỈ HUY TRƯỞNG</div>
-                <div class="sig-caption">(Ký, ghi rõ họ tên)</div>
-                <div class="sig-space"></div>
-                <div class="sig-name">Chỉ Huy Trưởng Công Trường</div>
-              </td>
-              <td>
                 <div class="sig-role">BAN GIÁM ĐỐC PHÊ DUYỆT</div>
-                <div class="sig-caption">(Ký duyệt & đóng dấu)</div>
+                <div class="sig-caption">(Ký duyệt và đóng dấu)</div>
                 <div class="sig-space"></div>
                 <div class="sig-name">${approver}</div>
               </td>
