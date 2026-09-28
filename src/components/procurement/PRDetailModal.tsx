@@ -649,60 +649,28 @@ export const PRDetailModal: React.FC<PRDetailModalProps> = ({
                 </span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }} className="no-print">
-                {/* VAT Toggle Selector (Có thể có hoặc không thuế) */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', backgroundColor: '#f1f5f9', padding: '3px 6px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
-                  <span style={{ fontSize: '12px', color: '#475569', fontWeight: 700, marginRight: '4px' }}>Thuế VAT:</span>
-                  <button
-                    type="button"
-                    onClick={() => setVatOption('NONE')}
+                {/* VAT Display Badge (Cố định theo người lập phiếu đề xuất, không cho chỉnh sửa khi xem/duyệt) */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    backgroundColor: vatRate > 0 ? 'rgba(37, 99, 235, 0.08)' : '#f1f5f9',
+                    padding: '5px 12px',
+                    borderRadius: '8px',
+                    border: `1px solid ${vatRate > 0 ? '#bfdbfe' : '#cbd5e1'}`,
+                  }}
+                >
+                  <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>Thuế VAT:</span>
+                  <span
                     style={{
-                      padding: '4px 10px',
-                      fontSize: '11px',
-                      fontWeight: vatOption === 'NONE' ? 800 : 500,
-                      backgroundColor: vatOption === 'NONE' ? '#ffffff' : 'transparent',
-                      color: vatOption === 'NONE' ? '#0f172a' : '#64748b',
-                      border: 'none',
-                      borderRadius: '5px',
-                      cursor: 'pointer',
-                      boxShadow: vatOption === 'NONE' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
+                      fontSize: '12px',
+                      fontWeight: 800,
+                      color: vatRate > 0 ? '#1d4ed8' : '#475569',
                     }}
                   >
-                    Không thuế (0%)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setVatOption('8')}
-                    style={{
-                      padding: '4px 10px',
-                      fontSize: '11px',
-                      fontWeight: vatOption === '8' ? 800 : 500,
-                      backgroundColor: vatOption === '8' ? '#ffffff' : 'transparent',
-                      color: vatOption === '8' ? '#0f172a' : '#64748b',
-                      border: 'none',
-                      borderRadius: '5px',
-                      cursor: 'pointer',
-                      boxShadow: vatOption === '8' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
-                    }}
-                  >
-                    VAT 8%
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setVatOption('10')}
-                    style={{
-                      padding: '4px 10px',
-                      fontSize: '11px',
-                      fontWeight: vatOption === '10' ? 800 : 500,
-                      backgroundColor: vatOption === '10' ? '#ffffff' : 'transparent',
-                      color: vatOption === '10' ? '#0f172a' : '#64748b',
-                      border: 'none',
-                      borderRadius: '5px',
-                      cursor: 'pointer',
-                      boxShadow: vatOption === '10' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
-                    }}
-                  >
-                    VAT 10%
-                  </button>
+                    {vatOption === 'NONE' || vatOption === '0' ? 'Không tính thuế (0%)' : `VAT ${vatOption}%`}
+                  </span>
                 </div>
                 <span className="badge badge-primary" style={{ fontSize: '12px', padding: '5px 12px', fontWeight: 800 }}>
                   Tổng chi: {formatCurrency(totalWithVat)}
