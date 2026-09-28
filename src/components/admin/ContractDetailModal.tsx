@@ -1,21 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Contract, ContractAppendix } from '../../types';
-import { adminApi } from '../../api';
+import { adminApi, uploadApi } from '../../api';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import {
   X,
   FileText,
   Plus,
   Printer,
-  CheckCircle,
   Calendar,
   DollarSign,
   Layers,
   BookOpen,
-  Building2,
-  Shield,
-  Clock,
+  UploadCloud,
+  ExternalLink,
   Download,
+  FileCheck,
+  Eye,
+  CheckCircle2,
 } from 'lucide-react';
 
 interface ContractDetailModalProps {
@@ -31,9 +32,12 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
 }) => {
   const [contract, setContract] = useState<Contract | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'agreement' | 'appendices'>('agreement');
+  const [activeTab, setActiveTab] = useState<'scan' | 'agreement' | 'appendices'>('scan');
   const [showAddAppendix, setShowAddAppendix] = useState(false);
   const [submittingAppendix, setSubmittingAppendix] = useState(false);
+  const [uploadingScan, setUploadingScan] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // New appendix form
   const [appForm, setAppForm] = useState({
@@ -48,6 +52,12 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
     try {
       const data = await adminApi.getContractById(contractId);
       setContract(data);
+      // If contract doesn't have a fileUrl, default to 'agreement' tab, otherwise 'scan'
+      if (!data.fileUrl) {
+        setActiveTab('agreement');
+      } else {
+        setActiveTab('scan');
+      }
     } catch (err) {
       console.error('Failed to load contract:', err);
     } finally {
@@ -58,6 +68,40 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
   useEffect(() => {
     loadContract();
   }, [contractId]);
+
+  const handleUploadScanPdf = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !contract) return;
+
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+      alert('Vui lòng chọn tệp định dạng PDF!');
+      return;
+    }
+
+    setUploadingScan(true);
+    try {
+      const uploadRes = await uploadApi.uploadFile(file);
+      // Update contract fileUrl
+      await adminApi.updateContract(contract.id, {
+        contractName: contract.contractName,
+        contractValue: contract.contractValue,
+        vatRate: contract.vatRate || 10,
+        signedDate: contract.signedDate ? contract.signedDate.slice(0, 10) : undefined,
+        fileUrl: uploadRes.url,
+      });
+
+      alert('Đã tải lên và lưu file Scan PDF hợp đồng thành công!');
+      await loadContract();
+      setActiveTab('scan');
+      if (onUpdated) onUpdated();
+    } catch (err: any) {
+      console.error(err);
+      alert(err.response?.data?.message || 'Lỗi khi tải lên file scan PDF');
+    } finally {
+      setUploadingScan(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   const handleAddAppendix = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -204,7 +248,7 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
             </table>
           </div>
 
-          <div class="section-title">Điều 1: Phạm Vi Công Việc & Đối Tượng Hợp Đồng</div>
+          <div class="section-title">Điều 1: Phạm Vi Công Việc & Khối Lượng Thi Công</div>
           <p>Bên A đồng ý giao và Bên B đồng ý nhận thi công trọn gói hạng mục công trình: <strong>${contract.contractName}</strong> trực thuộc công trình <strong>${contract.projectName || `Dự án #${contract.projectId}`}</strong> đúng theo hồ sơ thiết kế kỹ thuật, bản vẽ thi công và tiêu chuẩn quy chuẩn xây dựng hiện hành.</p>
 
           <div class="section-title">Điều 2: Giá Trị Hợp Đồng & Phương Thức Thanh Toán</div>
@@ -284,7 +328,7 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
       style={{
         position: 'fixed',
         inset: 0,
-        backgroundColor: 'rgba(15, 23, 42, 0.7)',
+        backgroundColor: 'rgba(15, 23, 42, 0.75)',
         backdropFilter: 'blur(5px)',
         display: 'flex',
         alignItems: 'center',
@@ -299,9 +343,9 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
       <div
         className="card"
         style={{
-          width: '980px',
+          width: '1080px',
           maxWidth: '100%',
-          maxHeight: '94vh',
+          height: '94vh',
           display: 'flex',
           flexDirection: 'column',
           boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
@@ -310,10 +354,19 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
           padding: 0,
         }}
       >
+        {/* Hidden File Input for PDF upload */}
+        <input
+          type="file"
+          ref={fileInputRef}
+          accept="application/pdf,.pdf"
+          style={{ display: 'none' }}
+          onChange={handleUploadScanPdf}
+        />
+
         {/* Header */}
         <div
           style={{
-            padding: '18px 24px',
+            padding: '16px 24px',
             borderBottom: '1px solid var(--border-color)',
             display: 'flex',
             alignItems: 'center',
@@ -351,6 +404,24 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
                   {contract.contractNo}
                 </span>
                 <span className="badge badge-active">{contract.status || 'ACTIVE'}</span>
+                {contract.fileUrl && (
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      color: '#dc2626',
+                      backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                      border: '1px solid rgba(239, 68, 68, 0.2)',
+                      padding: '2px 8px',
+                      borderRadius: '6px',
+                    }}
+                  >
+                    <FileCheck size={12} /> Đã có bản scan PDF (Dấu đỏ)
+                  </span>
+                )}
               </div>
               <h2 style={{ margin: '4px 0 0 0', fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-main)' }}>
                 {contract.contractName}
@@ -361,10 +432,27 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-            <button className="btn btn-primary btn-sm" onClick={handlePrint} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-              <Printer size={15} /> In Hợp Đồng (A4)
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            {/* Upload PDF button */}
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadingScan}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+              title="Tải lên tệp scan PDF hợp đồng có dấu đỏ thực tế"
+            >
+              <UploadCloud size={15} style={{ color: 'var(--orange-primary)' }} />
+              {uploadingScan ? 'Đang tải lên...' : contract.fileUrl ? 'Đổi File Scan PDF' : 'Tải Lên Scan PDF'}
             </button>
+
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={handlePrint}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Printer size={15} /> In Trích Yếu A4
+            </button>
+
             <button
               className="btn btn-secondary btn-sm"
               onClick={onClose}
@@ -406,8 +494,30 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
           </div>
         </div>
 
-        {/* Tab switch within modal */}
+        {/* Tab Switcher */}
         <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', padding: '0 24px', backgroundColor: '#ffffff' }}>
+          <button
+            onClick={() => setActiveTab('scan')}
+            style={{
+              padding: '12px 18px',
+              border: 'none',
+              background: 'none',
+              cursor: 'pointer',
+              fontWeight: 600,
+              fontSize: '0.9rem',
+              color: activeTab === 'scan' ? '#ef4444' : 'var(--text-muted)',
+              borderBottom: activeTab === 'scan' ? '3px solid #ef4444' : '3px solid transparent',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}
+          >
+            <FileText size={16} /> 📑 Bản Scan PDF Hợp Đồng (Dấu Đỏ)
+            {contract.fileUrl && (
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#ef4444' }} />
+            )}
+          </button>
+
           <button
             onClick={() => setActiveTab('agreement')}
             style={{
@@ -424,8 +534,9 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
               gap: '8px',
             }}
           >
-            <BookOpen size={16} /> Toàn Văn Hợp Đồng Xây Dựng
+            <BookOpen size={16} /> 📜 Tóm Lược Điều Khoản Hợp Đồng
           </button>
+
           <button
             onClick={() => setActiveTab('appendices')}
             style={{
@@ -442,137 +553,247 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
               gap: '8px',
             }}
           >
-            <Layers size={16} /> Danh Sách Phụ Lục Hợp Đồng ({contract.appendices?.length || 0})
+            <Layers size={16} /> 📑 Phụ Lục Hợp Đồng ({contract.appendices?.length || 0})
           </button>
         </div>
 
         {/* Tab Content */}
-        <div style={{ padding: '24px', overflowY: 'auto', flex: 1 }}>
-          {/* TAB 1: TOÀN VĂN HỢP ĐỒNG */}
+        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+          {/* TAB 1: BẢN SCAN PDF HỢP ĐỒNG */}
+          {activeTab === 'scan' && (
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', backgroundColor: '#334155' }}>
+              {contract.fileUrl ? (
+                <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                  {/* Toolbar above embedded PDF */}
+                  <div
+                    style={{
+                      padding: '8px 20px',
+                      backgroundColor: '#1e293b',
+                      color: '#ffffff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      borderBottom: '1px solid #475569',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem' }}>
+                      <FileCheck size={16} style={{ color: '#22c55e' }} />
+                      <span>
+                        Tệp scan hợp đồng: <strong>{contract.fileUrl.split('/').pop()}</strong>
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <a
+                        href={contract.fileUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="btn btn-secondary btn-sm"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', textDecoration: 'none', color: '#ffffff', backgroundColor: '#334155', border: '1px solid #475569' }}
+                      >
+                        <ExternalLink size={14} /> Mở Cửa Sổ Mới
+                      </a>
+                      <a
+                        href={contract.fileUrl}
+                        download={`${contract.contractNo}.pdf`}
+                        className="btn btn-secondary btn-sm"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', textDecoration: 'none', color: '#ffffff', backgroundColor: '#334155', border: '1px solid #475569' }}
+                      >
+                        <Download size={14} /> Tải Về Máy
+                      </a>
+                      <button
+                        className="btn btn-primary btn-sm"
+                        onClick={() => fileInputRef.current?.click()}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                      >
+                        <UploadCloud size={14} /> Tải Bản Scan Khác
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Embedded PDF iframe */}
+                  <div style={{ flex: 1, minHeight: '480px', position: 'relative' }}>
+                    <iframe
+                      src={`${contract.fileUrl}#toolbar=1&navpanes=1`}
+                      title={`Bản scan ${contract.contractNo}`}
+                      style={{ width: '100%', height: '100%', border: 'none' }}
+                    />
+                  </div>
+                </div>
+              ) : (
+                /* Empty state: Prompt to upload scan PDF */
+                <div
+                  style={{
+                    margin: 'auto',
+                    maxWidth: '540px',
+                    padding: '40px 30px',
+                    backgroundColor: '#ffffff',
+                    borderRadius: '16px',
+                    textAlign: 'center',
+                    boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: '64px',
+                      height: '64px',
+                      borderRadius: '50%',
+                      backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                      color: '#ef4444',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      margin: '0 auto 16px auto',
+                    }}
+                  >
+                    <UploadCloud size={32} />
+                  </div>
+                  <h3 style={{ margin: '0 0 8px 0', fontSize: '1.2rem', fontWeight: 700 }}>
+                    Chưa Lưu Bản Scan PDF Hợp Đồng Ký Dấu Đỏ
+                  </h3>
+                  <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: '20px' }}>
+                    Hợp đồng xây dựng thường được in ra ký tên và đóng dấu đỏ hai bên. Bạn hãy chụp hoặc quét bản scan PDF của hợp đồng này và tải lên để lưu trữ trọn đời trong hồ sơ công trình.
+                  </p>
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadingScan}
+                    style={{ padding: '10px 24px', fontSize: '0.95rem', display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+                  >
+                    <UploadCloud size={18} />
+                    {uploadingScan ? 'Đang tải lên...' : 'Chọn Tệp PDF Scan Hợp Đồng'}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 2: TÓM LƯỢC ĐIỀU KHOẢN HỢP ĐỒNG */}
           {activeTab === 'agreement' && (
-            <div
-              style={{
-                backgroundColor: '#ffffff',
-                border: '1px solid var(--border-color)',
-                borderRadius: '12px',
-                padding: '32px 40px',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-                fontFamily: "'Times New Roman', serif",
-                fontSize: '15px',
-                lineHeight: 1.6,
-                color: '#1e293b',
-              }}
-            >
-              {/* National Banner */}
-              <div style={{ textAlign: 'center', marginBottom: '25px' }}>
-                <div style={{ fontWeight: 700, fontSize: '14px', textTransform: 'uppercase' }}>
-                  CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM
+            <div style={{ padding: '24px' }}>
+              <div
+                style={{
+                  backgroundColor: '#ffffff',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '12px',
+                  padding: '32px 40px',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+                  fontFamily: "'Times New Roman', serif",
+                  fontSize: '15px',
+                  lineHeight: 1.6,
+                  color: '#1e293b',
+                }}
+              >
+                {/* National Banner */}
+                <div style={{ textAlign: 'center', marginBottom: '25px' }}>
+                  <div style={{ fontWeight: 700, fontSize: '14px', textTransform: 'uppercase' }}>
+                    CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM
+                  </div>
+                  <div style={{ fontWeight: 700, fontSize: '14px' }}>
+                    Độc lập - Tự do - Hạnh phúc
+                  </div>
+                  <div style={{ width: '130px', height: '1px', backgroundColor: '#334155', margin: '4px auto 0 auto' }} />
                 </div>
-                <div style={{ fontWeight: 700, fontSize: '14px' }}>
-                  Độc lập - Tự do - Hạnh phúc
-                </div>
-                <div style={{ width: '130px', height: '1px', backgroundColor: '#334155', margin: '4px auto 0 auto' }} />
-              </div>
 
-              {/* Title */}
-              <div style={{ textAlign: 'center', marginBottom: '25px' }}>
-                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, textTransform: 'uppercase' }}>
-                  HỢP ĐỒNG THI CÔNG XÂY DỰNG CÔNG TRÌNH
-                </h3>
-                <div style={{ fontStyle: 'italic', fontSize: '14px', marginTop: '4px' }}>
-                  Số: <strong>{contract.contractNo}</strong>
+                {/* Title */}
+                <div style={{ textAlign: 'center', marginBottom: '25px' }}>
+                  <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, textTransform: 'uppercase' }}>
+                    HỢP ĐỒNG THI CÔNG XÂY DỰNG CÔNG TRÌNH
+                  </h3>
+                  <div style={{ fontStyle: 'italic', fontSize: '14px', marginTop: '4px' }}>
+                    Số: <strong>{contract.contractNo}</strong>
+                  </div>
+                  <div style={{ fontSize: '14px', marginTop: '2px' }}>
+                    Gói thầu: <strong>{contract.contractName}</strong>
+                  </div>
                 </div>
-                <div style={{ fontSize: '14px', marginTop: '2px' }}>
-                  Gói thầu: <strong>{contract.contractName}</strong>
+
+                {/* Parties */}
+                <div style={{ marginBottom: '20px' }}>
+                  <div style={{ fontWeight: 700, fontSize: '15px', textTransform: 'uppercase', marginBottom: '4px' }}>
+                    BÊN GIAO THẦU (CHỦ ĐẦU TƯ - BÊN A):
+                  </div>
+                  <div style={{ paddingLeft: '16px' }}>
+                    <div>- Đơn vị: <strong>{contract.projectName?.includes('Móng M02B') ? 'TẬP ĐOÀN NAM LONG GROUP' : 'BAN QUẢN LÝ DỰ ÁN ĐẦU TƯ XÂY DỰNG'}</strong></div>
+                    <div>- Dự án / Công trình: <strong>{contract.projectName}</strong></div>
+                    <div>- Địa điểm thi công: <strong>Bình Dương / Theo hồ sơ mời thầu</strong></div>
+                  </div>
                 </div>
-              </div>
 
-              {/* Parties */}
-              <div style={{ marginBottom: '20px' }}>
-                <div style={{ fontWeight: 700, fontSize: '15px', textTransform: 'uppercase', marginBottom: '4px' }}>
-                  BÊN GIAO THẦU (CHỦ ĐẦU TƯ - BÊN A):
+                <div style={{ marginBottom: '20px' }}>
+                  <div style={{ fontWeight: 700, fontSize: '15px', textTransform: 'uppercase', marginBottom: '4px' }}>
+                    BÊN NHẬN THẦU (NHÀ THẦU THI CÔNG - BÊN B):
+                  </div>
+                  <div style={{ paddingLeft: '16px' }}>
+                    <div>- Tên doanh nghiệp: <strong>CÔNG TY CỔ PHẦN XÂY DỰNG KỸ THUẬT BMC</strong></div>
+                    <div>- Người đại diện: <strong>Ban Giám Đốc Công Ty</strong></div>
+                    <div>- Mã số thuế: <strong>3700148567</strong></div>
+                    <div>- Trụ sở: <strong>Khu đô thị sinh thái Chánh Mỹ, Phường Chánh Mỹ, TP. Thủ Dầu Một, Tỉnh Bình Dương</strong></div>
+                  </div>
                 </div>
-                <div style={{ paddingLeft: '16px' }}>
-                  <div>- Đơn vị: <strong>{contract.projectName?.includes('Móng M02B') ? 'TẬP ĐOÀN NAM LONG GROUP' : 'BAN QUẢN LÝ DỰ ÁN ĐẦU TƯ XÂY DỰNG'}</strong></div>
-                  <div>- Dự án / Công trình: <strong>{contract.projectName}</strong></div>
-                  <div>- Địa điểm thi công: <strong>Bình Dương / Theo hồ sơ mời thầu</strong></div>
+
+                {/* Articles */}
+                <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '16px', marginTop: '16px' }}>
+                  <h4 style={{ margin: '0 0 6px 0', fontSize: '15px', fontWeight: 700, textTransform: 'uppercase' }}>
+                    Điều 1: Phạm Vi Công Việc & Khối Lượng Thi Công
+                  </h4>
+                  <p style={{ margin: '0 0 12px 0', textIndent: '24px' }}>
+                    Bên A giao cho Bên B thực hiện thi công xây dựng trọn gói hạng mục <strong>{contract.contractName}</strong> trực thuộc công trình <strong>{contract.projectName}</strong> đúng theo hồ sơ thiết kế bản vẽ thi công đã được phê duyệt, tiêu chuẩn kỹ thuật xây dựng Việt Nam và cam kết an toàn lao động.
+                  </p>
+
+                  <h4 style={{ margin: '0 0 6px 0', fontSize: '15px', fontWeight: 700, textTransform: 'uppercase' }}>
+                    Điều 2: Giá Trị Hợp Đồng & Điều Khoản Thanh Toán
+                  </h4>
+                  <p style={{ margin: '0 0 8px 0', textIndent: '24px' }}>
+                    1. Giá trị hợp đồng gốc: <strong>{formatCurrency(contract.contractValue)}</strong> (Thuế VAT: {contract.vatRate || 10}%).
+                  </p>
+                  <p style={{ margin: '0 0 8px 0', textIndent: '24px' }}>
+                    2. Tổng giá trị sau các phụ lục bổ sung: <strong style={{ color: 'var(--orange-primary)' }}>{formatCurrency(contract.totalAdjustedValue || contract.contractValue)}</strong>.
+                  </p>
+                  <p style={{ margin: '0 0 8px 0', textIndent: '24px' }}>
+                    3. <strong>Tạm ứng:</strong> Bên A tạm ứng 20% giá trị hợp đồng sau khi ký kết và nhận chứng thư bảo lãnh tạm ứng hợp lệ.
+                  </p>
+                  <p style={{ margin: '0 0 8px 0', textIndent: '24px' }}>
+                    4. <strong>Thanh toán đợt:</strong> Thanh toán định kỳ hàng tháng theo khối lượng nghiệm thu hoàn thành thực tế được chỉ huy trưởng và tư vấn giám sát ký xác nhận (A-B).
+                  </p>
+                  <p style={{ margin: '0 0 12px 0', textIndent: '24px' }}>
+                    5. <strong>Bảo hành công trình:</strong> Bên A giữ lại 5% giá trị quyết toán hợp đồng làm tiền bảo hành công trình trong thời hạn 12 - 24 tháng theo quy định.
+                  </p>
+
+                  <h4 style={{ margin: '0 0 6px 0', fontSize: '15px', fontWeight: 700, textTransform: 'uppercase' }}>
+                    Điều 3: Tiến Độ Thực Hiện & Bàn Giao
+                  </h4>
+                  <p style={{ margin: '0 0 12px 0', textIndent: '24px' }}>
+                    Hợp đồng có hiệu lực thi công kể từ ngày <strong>{formatDate(contract.signedDate)}</strong>. Bên B có trách nhiệm bố trí đầy đủ nhân lực, vật tư và thiết bị máy móc đạt chuẩn để hoàn thành đúng tiến độ đã cam kết với Chủ Đầu Tư.
+                  </p>
+
+                  <h4 style={{ margin: '0 0 6px 0', fontSize: '15px', fontWeight: 700, textTransform: 'uppercase' }}>
+                    Điều 4: Phụ Lục Hợp Đồng
+                  </h4>
+                  <p style={{ margin: '0 0 20px 0', textIndent: '24px' }}>
+                    Mọi thay đổi về phạm vi công việc, khối lượng phát sinh hoặc điều chỉnh đơn giá sẽ được hai bên xác lập bằng các <strong>Phụ lục hợp đồng</strong> và là bộ phận không thể tách rời của văn bản hợp đồng này.
+                  </p>
                 </div>
-              </div>
 
-              <div style={{ marginBottom: '20px' }}>
-                <div style={{ fontWeight: 700, fontSize: '15px', textTransform: 'uppercase', marginBottom: '4px' }}>
-                  BÊN NHẬN THẦU (NHÀ THẦU THI CÔNG - BÊN B):
-                </div>
-                <div style={{ paddingLeft: '16px' }}>
-                  <div>- Tên doanh nghiệp: <strong>CÔNG TY CỔ PHẦN XÂY DỰNG KỸ THUẬT BMC</strong></div>
-                  <div>- Người đại diện: <strong>Ban Giám Đốc Công Ty</strong></div>
-                  <div>- Mã số thuế: <strong>3700148567</strong></div>
-                  <div>- Trụ sở: <strong>Khu đô thị sinh thái Chánh Mỹ, Phường Chánh Mỹ, TP. Thủ Dầu Một, Tỉnh Bình Dương</strong></div>
-                </div>
-              </div>
-
-              {/* Articles */}
-              <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '16px', marginTop: '16px' }}>
-                <h4 style={{ margin: '0 0 6px 0', fontSize: '15px', fontWeight: 700, textTransform: 'uppercase' }}>
-                  Điều 1: Phạm Vi Công Việc & Khối Lượng Thi Công
-                </h4>
-                <p style={{ margin: '0 0 12px 0', textIndent: '24px' }}>
-                  Bên A giao cho Bên B thực hiện thi công xây dựng trọn gói hạng mục <strong>{contract.contractName}</strong> trực thuộc công trình <strong>{contract.projectName}</strong> đúng theo hồ sơ thiết kế bản vẽ thi công đã được phê duyệt, tiêu chuẩn kỹ thuật xây dựng Việt Nam và cam kết an toàn lao động.
-                </p>
-
-                <h4 style={{ margin: '0 0 6px 0', fontSize: '15px', fontWeight: 700, textTransform: 'uppercase' }}>
-                  Điều 2: Giá Trị Hợp Đồng & Điều Khoản Thanh Toán
-                </h4>
-                <p style={{ margin: '0 0 8px 0', textIndent: '24px' }}>
-                  1. Giá trị hợp đồng gốc: <strong>{formatCurrency(contract.contractValue)}</strong> (Thuế VAT: {contract.vatRate || 10}%).
-                </p>
-                <p style={{ margin: '0 0 8px 0', textIndent: '24px' }}>
-                  2. Tổng giá trị sau các phụ lục bổ sung: <strong style={{ color: 'var(--orange-primary)' }}>{formatCurrency(contract.totalAdjustedValue || contract.contractValue)}</strong>.
-                </p>
-                <p style={{ margin: '0 0 8px 0', textIndent: '24px' }}>
-                  3. <strong>Tạm ứng:</strong> Bên A tạm ứng 20% giá trị hợp đồng sau khi ký kết và nhận chứng thư bảo lãnh tạm ứng hợp lệ.
-                </p>
-                <p style={{ margin: '0 0 8px 0', textIndent: '24px' }}>
-                  4. <strong>Thanh toán đợt:</strong> Thanh toán định kỳ hàng tháng theo khối lượng nghiệm thu hoàn thành thực tế được chỉ huy trưởng và tư vấn giám sát ký xác nhận (A-B).
-                </p>
-                <p style={{ margin: '0 0 12px 0', textIndent: '24px' }}>
-                  5. <strong>Bảo hành công trình:</strong> Bên A giữ lại 5% giá trị quyết toán hợp đồng làm tiền bảo hành công trình trong thời hạn 12 - 24 tháng theo quy định.
-                </p>
-
-                <h4 style={{ margin: '0 0 6px 0', fontSize: '15px', fontWeight: 700, textTransform: 'uppercase' }}>
-                  Điều 3: Tiến Độ Thực Hiện & Bàn Giao
-                </h4>
-                <p style={{ margin: '0 0 12px 0', textIndent: '24px' }}>
-                  Hợp đồng có hiệu lực thi công kể từ ngày <strong>{formatDate(contract.signedDate)}</strong>. Bên B có trách nhiệm bố trí đầy đủ nhân lực, vật tư và thiết bị máy móc đạt chuẩn để hoàn thành đúng tiến độ đã cam kết với Chủ Đầu Tư.
-                </p>
-
-                <h4 style={{ margin: '0 0 6px 0', fontSize: '15px', fontWeight: 700, textTransform: 'uppercase' }}>
-                  Điều 4: Phụ Lục Hợp Đồng
-                </h4>
-                <p style={{ margin: '0 0 20px 0', textIndent: '24px' }}>
-                  Mọi thay đổi về phạm vi công việc, khối lượng phát sinh hoặc điều chỉnh đơn giá sẽ được hai bên xác lập bằng các <strong>Phụ lục hợp đồng</strong> và là bộ phận không thể tách rời của văn bản hợp đồng này.
-                </p>
-              </div>
-
-              {/* Signatures */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', marginTop: '30px', textAlign: 'center' }}>
-                <div>
-                  <div style={{ fontWeight: 700, textTransform: 'uppercase', fontSize: '14px' }}>ĐẠI DIỆN CHỦ ĐẦU TƯ (BÊN A)</div>
-                  <div style={{ fontStyle: 'italic', fontSize: '13px', marginTop: '2px' }}>(Ký tên và đóng dấu)</div>
-                  <div style={{ height: '70px' }} />
-                </div>
-                <div>
-                  <div style={{ fontWeight: 700, textTransform: 'uppercase', fontSize: '14px' }}>ĐẠI DIỆN NHÀ THẦU BMC (BÊN B)</div>
-                  <div style={{ fontStyle: 'italic', fontSize: '13px', marginTop: '2px' }}>(Ký tên và đóng dấu)</div>
-                  <div style={{ height: '70px' }} />
+                {/* Signatures */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', marginTop: '30px', textAlign: 'center' }}>
+                  <div>
+                    <div style={{ fontWeight: 700, textTransform: 'uppercase', fontSize: '14px' }}>ĐẠI DIỆN CHỦ ĐẦU TƯ (BÊN A)</div>
+                    <div style={{ fontStyle: 'italic', fontSize: '13px', marginTop: '2px' }}>(Ký tên và đóng dấu)</div>
+                    <div style={{ height: '70px' }} />
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 700, textTransform: 'uppercase', fontSize: '14px' }}>ĐẠI DIỆN NHÀ THẦU BMC (BÊN B)</div>
+                    <div style={{ fontStyle: 'italic', fontSize: '13px', marginTop: '2px' }}>(Ký tên và đóng dấu)</div>
+                    <div style={{ height: '70px' }} />
+                  </div>
                 </div>
               </div>
             </div>
           )}
 
-          {/* TAB 2: DANH SÁCH PHỤ LỤC */}
+          {/* TAB 3: DANH SÁCH PHỤ LỤC */}
           {activeTab === 'appendices' && (
-            <div>
+            <div style={{ padding: '24px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
                 <div>
                   <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>
@@ -713,9 +934,10 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div style={{ padding: '14px 24px', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-card-subtle, #f8fafc)' }}>
-          <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-            Hợp đồng xây dựng trực thuộc hệ sinh thái ERP BMC
+        <div style={{ padding: '12px 24px', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-card-subtle, #f8fafc)' }}>
+          <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <FileCheck size={14} style={{ color: 'var(--emerald-success)' }} />
+            Hệ thống Quản trị Hợp đồng Thi công & Lưu trữ Scan PDF - BMC Construction ERP
           </div>
           <button className="btn btn-secondary" onClick={onClose}>
             Đóng

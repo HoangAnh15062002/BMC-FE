@@ -413,6 +413,10 @@ export const adminApi = {
     const res = await apiClient.post<Contract>('/contracts', data);
     return res.data;
   },
+  updateContract: async (id: number, data: any) => {
+    const res = await apiClient.put<Contract>(`/contracts/${id}`, data);
+    return res.data;
+  },
   addAppendix: async (contractId: number, data: any) => {
     const res = await apiClient.post(`/contracts/${contractId}/appendices`, data);
     return res.data;

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { adminApi, projectApi, procurementApi } from '../api';
+import { adminApi, projectApi, procurementApi, uploadApi } from '../api';
 import { Investor, Contract, Project, ProjectMember, Supplier } from '../types';
 import { formatCurrency, formatDate } from '../utils/formatters';
 import {
@@ -21,9 +21,12 @@ import {
   UserCheck,
   Layers,
   Sparkles,
+  UploadCloud,
+  FileCheck,
 } from 'lucide-react';
 import { InvestorDetailModal } from '../components/admin/InvestorDetailModal';
 import { ContractDetailModal } from '../components/admin/ContractDetailModal';
+import { PdfViewerModal } from '../components/common/PdfViewerModal';
 
 export const AdminPage: React.FC = () => {
   const [tab, setTab] = useState<'investors' | 'contracts' | 'members' | 'partners'>('investors');
@@ -46,6 +49,11 @@ export const AdminPage: React.FC = () => {
   // Modals for detail views
   const [selectedInvestor, setSelectedInvestor] = useState<Investor | null>(null);
   const [selectedContractId, setSelectedContractId] = useState<number | null>(null);
+  const [pdfModal, setPdfModal] = useState<{ isOpen: boolean; title: string; url: string }>({
+    isOpen: false,
+    title: '',
+    url: '',
+  });
 
   // Modal: Create Investor
   const [showInvModal, setShowInvModal] = useState(false);
@@ -61,6 +69,7 @@ export const AdminPage: React.FC = () => {
 
   // Modal: Create Contract
   const [showCtrModal, setShowCtrModal] = useState(false);
+  const [uploadingCtrPdf, setUploadingCtrPdf] = useState(false);
   const [ctrForm, setCtrForm] = useState({
     projectId: '',
     contractNo: '',
@@ -68,6 +77,7 @@ export const AdminPage: React.FC = () => {
     signedDate: new Date().toISOString().slice(0, 10),
     contractValue: '',
     vatRate: '10',
+    fileUrl: '',
   });
 
   // Modal: Add Member to Ban Chỉ Huy
@@ -186,6 +196,7 @@ export const AdminPage: React.FC = () => {
         signedDate: ctrForm.signedDate || undefined,
         contractValue: Number(ctrForm.contractValue) || 0,
         vatRate: Number(ctrForm.vatRate) || 10,
+        fileUrl: ctrForm.fileUrl || undefined,
       });
       setShowCtrModal(false);
       setCtrForm({
@@ -195,6 +206,7 @@ export const AdminPage: React.FC = () => {
         signedDate: new Date().toISOString().slice(0, 10),
         contractValue: '',
         vatRate: '10',
+        fileUrl: '',
       });
       alert('Thêm hợp đồng thi công thành công!');
       loadData();
@@ -737,7 +749,27 @@ export const AdminPage: React.FC = () => {
                         {c.projectCode || `ID: ${c.projectId}`}
                       </span>
                     </td>
-                    <td style={{ fontWeight: 600 }}>{c.contractName}</td>
+                    <td>
+                      <div style={{ fontWeight: 600 }}>{c.contractName}</div>
+                      {c.fileUrl && (
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            fontSize: '0.72rem',
+                            color: '#ef4444',
+                            fontWeight: 700,
+                            backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                            padding: '1px 6px',
+                            borderRadius: '4px',
+                            marginTop: '2px',
+                          }}
+                        >
+                          <FileText size={10} /> Đã có tệp scan PDF
+                        </span>
+                      )}
+                    </td>
                     <td>{formatDate(c.signedDate)}</td>
                     <td>{formatCurrency(c.contractValue)}</td>
                     <td style={{ fontWeight: 700, color: 'var(--orange-primary)' }}>
@@ -752,17 +784,47 @@ export const AdminPage: React.FC = () => {
                       <span className="badge badge-active">{c.status || 'ACTIVE'}</span>
                     </td>
                     <td style={{ textAlign: 'center' }}>
-                      <button
-                        className="btn btn-primary btn-sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedContractId(c.id);
-                        }}
-                        title="Xem toàn văn hợp đồng & phụ lục"
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
-                      >
-                        <Eye size={14} /> Xem Hợp Đồng
-                      </button>
+                      <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                        {c.fileUrl && (
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPdfModal({
+                                isOpen: true,
+                                title: `Bản Scan Hợp Đồng: ${c.contractNo} (Có Dấu Đỏ)`,
+                                url: c.fileUrl!,
+                              });
+                            }}
+                            title="Xem ngay bản scan PDF có dấu đỏ"
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              color: '#ef4444',
+                              borderColor: 'rgba(239, 68, 68, 0.3)',
+                              backgroundColor: 'rgba(239, 68, 68, 0.05)',
+                              whiteSpace: 'nowrap',
+                              fontWeight: 600,
+                            }}
+                          >
+                            <FileText size={14} /> Scan PDF
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedContractId(c.id);
+                          }}
+                          title="Xem toàn văn hợp đồng & phụ lục"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}
+                        >
+                          <Eye size={14} /> Chi Tiết
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -1084,9 +1146,46 @@ export const AdminPage: React.FC = () => {
                   <input type="number" className="form-input" value={ctrForm.vatRate} onChange={(e) => setCtrForm({ ...ctrForm, vatRate: e.target.value })} placeholder="10" min="0" max="100" />
                 </div>
               </div>
+
+              {/* Upload signed scan PDF */}
+              <div className="form-group">
+                <label className="form-label">Tệp Scan PDF Hợp Đồng (Ký & Đóng Dấu Đỏ)</label>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                  <input
+                    type="file"
+                    accept="application/pdf,.pdf"
+                    className="form-input"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      setUploadingCtrPdf(true);
+                      try {
+                        const res = await uploadApi.uploadFile(file);
+                        setCtrForm((prev) => ({ ...prev, fileUrl: res.url }));
+                        alert('Đã tải lên tệp PDF scan hợp đồng thành công!');
+                      } catch (err: any) {
+                        alert(err.response?.data?.message || 'Lỗi khi tải lên tệp PDF');
+                      } finally {
+                        setUploadingCtrPdf(false);
+                      }
+                    }}
+                  />
+                  {ctrForm.fileUrl && (
+                    <span style={{ fontSize: '0.8rem', color: '#10b981', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                      ✓ Đã đính kèm PDF
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                  Hỗ trợ tải lên file PDF scan hợp đồng gốc có chữ ký & con dấu đỏ pháp lý
+                </div>
+              </div>
+
               <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '20px' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setShowCtrModal(false)}>Hủy</button>
-                <button type="submit" className="btn btn-primary" disabled={submitting}>{submitting ? 'Đang lưu...' : 'Lưu Hợp Đồng'}</button>
+                <button type="submit" className="btn btn-primary" disabled={submitting || uploadingCtrPdf}>
+                  {submitting ? 'Đang lưu...' : uploadingCtrPdf ? 'Đang tải PDF...' : 'Lưu Hợp Đồng'}
+                </button>
               </div>
             </form>
           </div>
@@ -1231,6 +1330,14 @@ export const AdminPage: React.FC = () => {
           onUpdated={loadData}
         />
       )}
+
+      {/* ===== MODAL: PDF Viewer ===== */}
+      <PdfViewerModal
+        isOpen={pdfModal.isOpen}
+        onClose={() => setPdfModal({ isOpen: false, title: '', url: '' })}
+        title={pdfModal.title}
+        pdfUrl={pdfModal.url}
+      />
     </div>
   );
 };
