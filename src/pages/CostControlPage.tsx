@@ -63,7 +63,13 @@ export const CostControlPage: React.FC = () => {
     setScanning(true);
     try {
       const res = await costControlApi.scanAlerts(selectedProjectId);
-      alert(`Đã quét xong cảnh báo! Phát hiện: ${res.newAlertsCount || 0} cảnh báo mới.`);
+      const generated = res.newAlertsGenerated ?? res.newAlertsCount ?? 0;
+      const totalAlerts = res.alerts?.length ?? 0;
+      if (generated > 0) {
+        alert(`Đã hoàn tất quét rủi ro! Hệ thống vừa tạo mới ${generated} cảnh báo.`);
+      } else {
+        alert(`Đã hoàn tất quét rủi ro! Hiện có ${totalAlerts} cảnh báo rủi ro đang mở cho dự án này.`);
+      }
       loadAlerts();
     } catch (err: any) {
       alert(err.response?.data?.message || 'Lỗi khi quét cảnh báo');
