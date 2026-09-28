@@ -401,6 +401,18 @@ export interface Investor {
   projectsCount?: number;
 }
 
+export interface ContractAppendix {
+  id: number;
+  contractId: number;
+  appendixNo: string;
+  signedDate: string;
+  valueChange?: number;
+  content?: string;
+  fileUrl?: string;
+  status: string;
+  createdAt?: string;
+}
+
 export interface Contract {
   id: number;
   projectId: number;
@@ -410,9 +422,15 @@ export interface Contract {
   contractName: string;
   signedDate: string;
   contractValue: number;
+  vatRate?: number;
   totalAdjustedValue: number;
   status: string;
   appendicesCount: number;
+  appendices?: ContractAppendix[];
+  startDate?: string;
+  endDate?: string;
+  fileUrl?: string;
+  description?: string;
 }
 
 export interface ProjectMember {

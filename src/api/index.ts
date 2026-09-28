@@ -405,6 +405,10 @@ export const adminApi = {
     const res = await apiClient.get<any>('/contracts', { params: { projectId } });
     return ensureArray<Contract>(res.data);
   },
+  getContractById: async (id: number) => {
+    const res = await apiClient.get<Contract>(`/contracts/${id}`);
+    return res.data;
+  },
   createContract: async (data: any) => {
     const res = await apiClient.post<Contract>('/contracts', data);
     return res.data;
@@ -428,6 +432,10 @@ export const adminApi = {
   createDocument: async (data: any) => {
     const res = await apiClient.post<ProjectDocument>('/project-documents', data);
     return res.data;
+  },
+  getUsers: async () => {
+    const res = await apiClient.get<any>('/users');
+    return ensureArray<any>(res.data);
   },
 };
 
