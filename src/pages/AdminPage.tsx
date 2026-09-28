@@ -536,8 +536,35 @@ export const AdminPage: React.FC = () => {
               </thead>
               <tbody>
                 {filteredInvestors.map((inv) => (
-                  <tr key={inv.id}>
-                    <td style={{ fontWeight: 700, color: 'var(--orange-primary)' }}>{inv.code}</td>
+                  <tr
+                    key={inv.id}
+                    onClick={() => setSelectedInvestor(inv)}
+                    style={{ cursor: 'pointer' }}
+                    title="Nhấp để xem hồ sơ chủ đầu tư & các dự án"
+                  >
+                    <td>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedInvestor(inv);
+                        }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          padding: 0,
+                          cursor: 'pointer',
+                          fontWeight: 700,
+                          color: 'var(--orange-primary)',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          textDecoration: 'underline',
+                        }}
+                      >
+                        <Eye size={13} /> {inv.code}
+                      </button>
+                    </td>
                     <td style={{ fontWeight: 600 }}>
                       <div>{inv.name}</div>
                       {inv.address && (
@@ -562,7 +589,10 @@ export const AdminPage: React.FC = () => {
                     <td style={{ textAlign: 'center' }}>
                       <button
                         className="btn btn-secondary btn-sm"
-                        onClick={() => setSelectedInvestor(inv)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedInvestor(inv);
+                        }}
                         title="Xem chi tiết & dự án liên quan"
                         style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                       >
@@ -630,25 +660,75 @@ export const AdminPage: React.FC = () => {
             </div>
           </div>
 
+          {/* Quick Guide Alert */}
+          <div
+            style={{
+              padding: '10px 16px',
+              backgroundColor: 'rgba(37, 99, 235, 0.05)',
+              border: '1px solid rgba(37, 99, 235, 0.15)',
+              borderRadius: '8px',
+              marginBottom: '16px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              fontSize: '0.85rem',
+              color: 'var(--blue-tech)',
+            }}
+          >
+            <FileText size={18} style={{ flexShrink: 0 }} />
+            <span>
+              💡 <strong>Xem Hợp Đồng:</strong> Bạn có thể <strong>click trực tiếp vào bất kỳ dòng nào</strong> hoặc bấm nút <strong>"Xem Hợp Đồng"</strong> để đọc toàn văn hợp đồng xây dựng, điều khoản pháp lý, quản lý phụ lục phát sinh và in bản A4.
+            </span>
+          </div>
+
           <div className="table-container">
             <table className="bmc-table">
               <thead>
                 <tr>
-                  <th>Số Hợp Đồng</th>
-                  <th>Công Trình / Dự Án</th>
+                  <th style={{ minWidth: '180px' }}>Số Hợp Đồng</th>
+                  <th style={{ minWidth: '220px' }}>Công Trình / Dự Án</th>
                   <th>Tên Gói Thầu / Hợp Đồng</th>
-                  <th>Ngày Ký</th>
-                  <th>Giá Trị Ban Đầu</th>
-                  <th>Tổng Sau Điều Chỉnh</th>
-                  <th>Số Phụ Lục</th>
-                  <th>Trạng Thái</th>
-                  <th style={{ textAlign: 'center' }}>Thao Tác</th>
+                  <th style={{ minWidth: '100px' }}>Ngày Ký</th>
+                  <th style={{ minWidth: '130px' }}>Giá Trị Ban Đầu</th>
+                  <th style={{ minWidth: '140px' }}>Tổng Sau Điều Chỉnh</th>
+                  <th style={{ minWidth: '90px' }}>Số Phụ Lục</th>
+                  <th style={{ minWidth: '90px' }}>Trạng Thái</th>
+                  <th style={{ minWidth: '150px', textAlign: 'center' }}>Thao Tác</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredContracts.map((c) => (
-                  <tr key={c.id}>
-                    <td style={{ fontWeight: 700, color: 'var(--blue-tech)' }}>{c.contractNo}</td>
+                  <tr
+                    key={c.id}
+                    onClick={() => setSelectedContractId(c.id)}
+                    style={{ cursor: 'pointer', transition: 'background-color 0.15s' }}
+                    title="Nhấp vào để xem chi tiết hợp đồng & phụ lục"
+                  >
+                    <td>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedContractId(c.id);
+                        }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          padding: 0,
+                          cursor: 'pointer',
+                          fontWeight: 700,
+                          color: 'var(--blue-tech)',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          textDecoration: 'underline',
+                          fontSize: '0.9rem',
+                        }}
+                        title="Bấm để xem hợp đồng"
+                      >
+                        <Eye size={15} /> {c.contractNo}
+                      </button>
+                    </td>
                     <td>
                       <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>
                         {c.projectName || `Dự án #${c.projectId}`}
@@ -673,12 +753,15 @@ export const AdminPage: React.FC = () => {
                     </td>
                     <td style={{ textAlign: 'center' }}>
                       <button
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => setSelectedContractId(c.id)}
-                        title="Xem chi tiết, phụ lục & in trích yếu"
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                        className="btn btn-primary btn-sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedContractId(c.id);
+                        }}
+                        title="Xem toàn văn hợp đồng & phụ lục"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
                       >
-                        <Eye size={14} /> Xem & Phụ Lục
+                        <Eye size={14} /> Xem Hợp Đồng
                       </button>
                     </td>
                   </tr>
