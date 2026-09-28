@@ -48,13 +48,27 @@ export const PRDetailModal: React.FC<PRDetailModalProps> = ({
     if (it.estimatedPrice && Number(it.estimatedPrice) > 0) return Number(it.estimatedPrice);
     const code = (it.materialCode || '').toUpperCase();
     const name = (it.materialName || '').toLowerCase();
+    const unit = (((it as any).unitCode || it.unitSymbol || it.unitName || '') as string).toUpperCase();
+    
     if (code.includes('GACH') || name.includes('gạch')) return 1350;
-    if (code.includes('CAT') || name.includes('cát')) return 320000;
-    if (code.includes('DA') || name.includes('đá')) return 280000;
-    if (code.includes('THEP') || name.includes('thép')) return 17500;
-    if (code.includes('XI') || name.includes('xi măng')) return 1650000;
+    if (code.includes('CAT') || name.includes('cát')) return 350000;
+    if (code.includes('DA') || name.includes('đá')) return 380000;
+    if (code.includes('THEP') || name.includes('thép')) {
+      if (unit.includes('TON') || unit.includes('TAN') || unit.includes('TẤN')) return 17500000;
+      return 17500;
+    }
+    if (code.includes('XI') || name.includes('xi măng')) {
+      if (unit.includes('KG')) return 1650;
+      return 1650000;
+    }
     if (code.includes('BE') || name.includes('bê tông')) return 1280000;
     return 150000;
+  };
+
+  const getUnitDisplay = (it: PurchaseRequestItem) => {
+    const rawUnit = (it as any).unitCode || it.unitSymbol || it.unitName || (it as any).unit;
+    if (!rawUnit) return 'kg';
+    return formatUnit(rawUnit);
   };
 
   // Raw or mock items list
@@ -99,6 +113,7 @@ export const PRDetailModal: React.FC<PRDetailModalProps> = ({
     };
   });
 
+  const totalQuantity = items.reduce((sum, it) => sum + (Number(it.quantity) || 0), 0);
   const totalEstimatedAmount = items.reduce((sum, it) => sum + (it.totalPrice || 0), 0);
   
   // Executive Budget Simulation for Director
@@ -148,6 +163,7 @@ export const PRDetailModal: React.FC<PRDetailModalProps> = ({
 
   return (
     <div
+      className="pr-modal-overlay"
       style={{
         position: 'fixed',
         top: 0,
@@ -163,11 +179,38 @@ export const PRDetailModal: React.FC<PRDetailModalProps> = ({
         padding: '20px',
       }}
     >
+      <style>{`
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          .pr-detail-modal-card, .pr-detail-modal-card * {
+            visibility: visible;
+          }
+          .pr-detail-modal-card {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            box-shadow: none !important;
+            border: none !important;
+          }
+          .pr-modal-overlay {
+            position: static !important;
+            background: none !important;
+            padding: 0 !important;
+          }
+          .no-print {
+            display: none !important;
+          }
+        }
+      `}</style>
       <div
-        className="card"
+        className="card pr-detail-modal-card"
         style={{
-          width: '100%',
-          maxWidth: '1100px',
+          width: '96vw',
+          maxWidth: '1260px',
           maxHeight: '92vh',
           display: 'flex',
           flexDirection: 'column',
@@ -398,27 +441,43 @@ export const PRDetailModal: React.FC<PRDetailModalProps> = ({
           {/* Section: Table of Materials */}
           <div style={{ marginBottom: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-              <h3 style={{ fontSize: '15px', fontWeight: 800, margin: 0, color: '#0f172a' }}>
-                Danh Sách Vật Tư Đề Xuất Cung Cấp Chi Tiết ({items.length} mặt hàng)
-              </h3>
-              <span style={{ fontSize: '12px', color: '#64748b' }}>
-                Mục đích: Cung ứng vật tư thi công đúng tiến độ dự án
+              <div>
+                <h3 style={{ fontSize: '15px', fontWeight: 800, margin: 0, color: '#0f172a' }}>
+                  Danh Sách Vật Tư Đề Xuất Cung Cấp Chi Tiết ({items.length} mặt hàng)
+                </h3>
+                <span style={{ fontSize: '12px', color: '#64748b' }}>
+                  Bao gồm chi tiết: Khối lượng yêu cầu, Đơn giá dự toán & Thành tiền giải ngân dự kiến
+                </span>
+              </div>
+              <span className="badge badge-primary no-print" style={{ fontSize: '12px', padding: '4px 10px' }}>
+                Tổng giá trị: {formatCurrency(totalEstimatedAmount)}
               </span>
             </div>
 
-            <div className="table-container" style={{ borderRadius: '10px', overflow: 'hidden', border: '1px solid #e2e8f0', background: '#ffffff' }}>
-              <table className="bmc-table" style={{ margin: 0 }}>
+            <div
+              className="table-container"
+              style={{
+                borderRadius: '10px',
+                overflowX: 'auto',
+                border: '1px solid #e2e8f0',
+                background: '#ffffff',
+                boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.05)',
+              }}
+            >
+              <table className="bmc-table" style={{ margin: 0, minWidth: '1080px', width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
-                  <tr style={{ backgroundColor: '#f8fafc' }}>
-                    <th style={{ width: '40px', textAlign: 'center', color: '#475569' }}>STT</th>
-                    <th style={{ color: '#475569' }}>Mã Vật Tư</th>
-                    <th style={{ color: '#475569' }}>Tên Vật Tư / Quy Cách Tiêu Chuẩn</th>
-                    <th style={{ color: '#475569' }}>ĐVT</th>
-                    <th style={{ color: '#475569' }}>Công Tác / Hạng Mục WBS</th>
-                    <th style={{ textAlign: 'right', color: '#475569' }}>Số Lượng Y/C</th>
-                    <th style={{ textAlign: 'right', color: '#475569' }}>Đơn Giá Dự Kiến (VNĐ)</th>
-                    <th style={{ textAlign: 'right', color: '#475569' }}>Thành Tiền Dự Kiến (VNĐ)</th>
-                    <th style={{ color: '#475569' }}>Ghi Chú Kỹ Thuật</th>
+                  <tr style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                    <th style={{ width: '45px', textAlign: 'center', color: '#475569', fontWeight: 700 }}>STT</th>
+                    <th style={{ width: '105px', color: '#475569', fontWeight: 700 }}>Mã Vật Tư</th>
+                    <th style={{ minWidth: '200px', color: '#475569', fontWeight: 700 }}>Tên Vật Tư / Quy Cách Tiêu Chuẩn</th>
+                    <th style={{ width: '75px', textAlign: 'center', color: '#475569', fontWeight: 700 }}>ĐVT</th>
+                    <th style={{ minWidth: '210px', color: '#475569', fontWeight: 700 }}>Công Tác / Hạng Mục WBS</th>
+                    <th style={{ width: '120px', textAlign: 'right', color: '#475569', fontWeight: 700 }}>Khối Lượng Y/C</th>
+                    <th style={{ width: '145px', textAlign: 'right', color: '#475569', fontWeight: 700 }}>Đơn Giá Dự Kiến (VNĐ)</th>
+                    <th style={{ width: '165px', textAlign: 'right', color: '#c2410c', fontWeight: 800, backgroundColor: '#fff7ed' }}>
+                      Thành Tiền Dự Kiến (VNĐ)
+                    </th>
+                    <th style={{ minWidth: '120px', color: '#475569', fontWeight: 700 }}>Ghi Chú Kỹ Thuật</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -433,14 +492,14 @@ export const PRDetailModal: React.FC<PRDetailModalProps> = ({
                       <td style={{ fontWeight: 700, color: '#0f172a', fontSize: '14px' }}>
                         {it.materialName || 'Vật tư công trình'}
                       </td>
-                      <td>
-                        <span className="badge badge-secondary" style={{ fontSize: '12px', fontWeight: 600 }}>
-                          {formatUnit(it.unitName || it.unitSymbol)}
+                      <td style={{ textAlign: 'center' }}>
+                        <span className="badge badge-secondary" style={{ fontSize: '12px', fontWeight: 700, padding: '3px 8px' }}>
+                          {getUnitDisplay(it)}
                         </span>
                       </td>
                       <td style={{ fontSize: '13px' }}>
                         <div style={{ color: '#1e293b', fontWeight: 600 }}>
-                          {it.projectTaskName || request.projectTaskName || 'Công tác chung'}
+                          {it.projectTaskName || request.projectTaskName || 'Công tác theo kế hoạch'}
                         </div>
                         <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
                           {it.projectItemName || request.projectItemName || ''}
@@ -452,28 +511,100 @@ export const PRDetailModal: React.FC<PRDetailModalProps> = ({
                       <td style={{ textAlign: 'right', color: '#2563eb', fontWeight: 700, fontSize: '13px' }}>
                         {formatCurrency(it.estimatedPrice || 0)}
                       </td>
-                      <td style={{ textAlign: 'right', fontWeight: 900, color: 'var(--brand-500)', fontSize: '14px' }}>
+                      <td style={{ textAlign: 'right', fontWeight: 900, color: '#ea580c', fontSize: '14px', backgroundColor: '#fffaf5' }}>
                         {formatCurrency(it.totalPrice || 0)}
                       </td>
                       <td style={{ fontSize: '12px', color: '#64748b' }}>{it.note || '-'}</td>
                     </tr>
                   ))}
-                  {/* Total Row */}
-                  <tr style={{ backgroundColor: '#f8fafc', fontWeight: 800 }}>
-                    <td colSpan={5} style={{ textAlign: 'right', paddingRight: '16px', color: '#0f172a', fontSize: '13px' }}>
-                      TỔNG CỘNG GIÁ TRỊ VẬT TƯ ĐỀ XUẤT (CHƯA VAT):
+
+                  {/* Summary Row 1: Line Item Subtotals */}
+                  <tr style={{ backgroundColor: '#f8fafc', fontWeight: 800, borderTop: '2px solid #cbd5e1' }}>
+                    <td colSpan={5} style={{ textAlign: 'right', paddingRight: '16px', color: '#334155', fontSize: '13px' }}>
+                      CỘNG KHỐI LƯỢNG & GIÁ TRỊ VẬT TƯ ({items.length} mặt hàng):
                     </td>
-                    <td style={{ textAlign: 'right', color: '#0f172a', fontSize: '14px' }}>
-                      {formatNumber(items.reduce((s, it) => s + Number(it.quantity || 0), 0), 2)}
+                    <td style={{ textAlign: 'right', color: '#0f172a', fontSize: '14px', fontWeight: 900 }}>
+                      {formatNumber(totalQuantity, 2)}
                     </td>
-                    <td></td>
-                    <td style={{ textAlign: 'right', fontSize: '16px', color: 'var(--brand-500)', fontWeight: 900 }}>
+                    <td style={{ textAlign: 'center', color: '#94a3b8' }}>-</td>
+                    <td style={{ textAlign: 'right', fontSize: '15px', color: '#ea580c', fontWeight: 900, backgroundColor: '#fffaf5' }}>
                       {formatCurrency(totalEstimatedAmount)}
                     </td>
                     <td></td>
                   </tr>
+
+                  {/* Summary Row 2: Subtotal before VAT */}
+                  <tr style={{ backgroundColor: '#ffffff', fontWeight: 700 }}>
+                    <td colSpan={7} style={{ textAlign: 'right', paddingRight: '16px', color: '#475569', fontSize: '13px' }}>
+                      Tổng giá trị đề xuất mua sắm (Chưa bao gồm thuế VAT):
+                    </td>
+                    <td style={{ textAlign: 'right', fontSize: '15px', color: '#0f172a', fontWeight: 800, backgroundColor: '#fffaf5' }}>
+                      {formatCurrency(totalEstimatedAmount)}
+                    </td>
+                    <td></td>
+                  </tr>
+
+                  {/* Summary Row 3: Estimated VAT */}
+                  <tr style={{ backgroundColor: '#ffffff', fontWeight: 700 }}>
+                    <td colSpan={7} style={{ textAlign: 'right', paddingRight: '16px', color: '#64748b', fontSize: '13px' }}>
+                      Dự kiến tiền thuế GTGT (VAT 10% tạm tính):
+                    </td>
+                    <td style={{ textAlign: 'right', fontSize: '14px', color: '#64748b', fontWeight: 700, backgroundColor: '#fffaf5' }}>
+                      +{formatCurrency(Math.round(totalEstimatedAmount * 0.1))}
+                    </td>
+                    <td style={{ fontSize: '11px', color: '#94a3b8', fontStyle: 'italic' }}>Thuế suất 10%</td>
+                  </tr>
+
+                  {/* Summary Row 4: Grand total after VAT */}
+                  <tr style={{ backgroundColor: '#fff7ed', fontWeight: 900, borderTop: '1px solid #fed7aa' }}>
+                    <td colSpan={7} style={{ textAlign: 'right', paddingRight: '16px', color: '#c2410c', fontSize: '14px' }}>
+                      TỔNG CỘNG NHU CẦU DÒNG TIỀN ĐỀ XUẤT (ĐÃ GỒM VAT):
+                    </td>
+                    <td style={{ textAlign: 'right', fontSize: '17px', color: '#ea580c', fontWeight: 900, backgroundColor: '#ffedd5' }}>
+                      {formatCurrency(Math.round(totalEstimatedAmount * 1.1))}
+                    </td>
+                    <td style={{ fontSize: '11px', color: '#9a3412', fontWeight: 700 }}>Đề xuất giải ngân</td>
+                  </tr>
                 </tbody>
               </table>
+            </div>
+
+            {/* Print Signatures Block (Visible only when printing) */}
+            <div
+              className="print-only"
+              style={{
+                display: 'none',
+                marginTop: '36px',
+                paddingTop: '20px',
+              }}
+            >
+              <style>{`
+                @media print {
+                  .print-only {
+                    display: block !important;
+                  }
+                }
+              `}</style>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', textAlign: 'center', fontSize: '13px' }}>
+                <div>
+                  <div style={{ fontWeight: 800, textTransform: 'uppercase' }}>NGƯỜI ĐỀ XUẤT</div>
+                  <div style={{ fontStyle: 'italic', fontSize: '11px', color: '#64748b' }}>(Ký và ghi rõ họ tên)</div>
+                  <div style={{ height: '70px' }}></div>
+                  <div style={{ fontWeight: 700 }}>{request.requestedByName || request.createdByName || 'Ban chỉ huy'}</div>
+                </div>
+                <div>
+                  <div style={{ fontWeight: 800, textTransform: 'uppercase' }}>CHỈ HUY TRƯỞNG CÔNG TRÌNH</div>
+                  <div style={{ fontStyle: 'italic', fontSize: '11px', color: '#64748b' }}>(Ký và ghi rõ họ tên)</div>
+                  <div style={{ height: '70px' }}></div>
+                  <div style={{ fontWeight: 700 }}>Chỉ huy trưởng</div>
+                </div>
+                <div>
+                  <div style={{ fontWeight: 800, textTransform: 'uppercase' }}>BAN GIÁM ĐỐC PHÊ DUYỆT</div>
+                  <div style={{ fontStyle: 'italic', fontSize: '11px', color: '#64748b' }}>(Ký duyệt & đóng dấu)</div>
+                  <div style={{ height: '70px' }}></div>
+                  <div style={{ fontWeight: 700 }}>{request.approvedByName || 'Ban Giám Đốc BMC'}</div>
+                </div>
+              </div>
             </div>
           </div>
 

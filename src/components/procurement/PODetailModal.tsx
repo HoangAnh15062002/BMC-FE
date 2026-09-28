@@ -112,8 +112,8 @@ export const PODetailModal: React.FC<PODetailModalProps> = ({
       <div
         className="card"
         style={{
-          width: '100%',
-          maxWidth: '1060px',
+          width: '95vw',
+          maxWidth: '1240px',
           maxHeight: '92vh',
           display: 'flex',
           flexDirection: 'column',
@@ -309,8 +309,8 @@ export const PODetailModal: React.FC<PODetailModalProps> = ({
               Danh Mục Vật Tư Đặt Hàng Chi Tiết
             </h3>
 
-            <div className="table-container" style={{ borderRadius: '10px', overflow: 'hidden', border: '1px solid #e2e8f0', background: '#ffffff' }}>
-              <table className="bmc-table" style={{ margin: 0 }}>
+            <div className="table-container" style={{ borderRadius: '10px', overflowX: 'auto', border: '1px solid #e2e8f0', background: '#ffffff' }}>
+              <table className="bmc-table" style={{ margin: 0, minWidth: '950px', width: '100%' }}>
                 <thead>
                   <tr style={{ backgroundColor: '#f8fafc' }}>
                     <th style={{ width: '40px', textAlign: 'center', color: '#475569' }}>STT</th>
@@ -337,7 +337,7 @@ export const PODetailModal: React.FC<PODetailModalProps> = ({
                       </td>
                       <td>
                         <span className="badge badge-secondary" style={{ fontSize: '12px', fontWeight: 600 }}>
-                          {formatUnit(it.unitName || it.unitSymbol)}
+                          {formatUnit((it as any).unitCode || it.unitName || it.unitSymbol)}
                         </span>
                       </td>
                       <td style={{ textAlign: 'right', fontWeight: 800, color: '#0f172a', fontSize: '14px' }}>
