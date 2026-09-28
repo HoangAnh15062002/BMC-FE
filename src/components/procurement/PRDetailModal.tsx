@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PurchaseRequest, PurchaseRequestItem } from '../../types';
 import { formatCurrency, formatNumber, formatDate, getPurchaseStatusLabel, getStatusBadgeClass, formatUnit } from '../../utils/formatters';
 import {
@@ -40,6 +40,27 @@ export const PRDetailModal: React.FC<PRDetailModalProps> = ({
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectInput, setShowRejectInput] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [vatOption, setVatOption] = useState<string>('NONE');
+
+  useEffect(() => {
+    if (!request) {
+      setVatOption('NONE');
+      return;
+    }
+    const note = (request.note || '').toUpperCase();
+    if (note.includes('[VAT:10]') || note.includes('VAT 10%') || note.includes('THUẾ 10%')) {
+      setVatOption('10');
+    } else if (note.includes('[VAT:8]') || note.includes('VAT 8%') || note.includes('THUẾ 8%')) {
+      setVatOption('8');
+    } else if (note.includes('[VAT:0]') || note.includes('KHÔNG TÍNH THUẾ') || note.includes('KHÔNG CÓ THUẾ') || note.includes('CHƯA GỒM VAT')) {
+      setVatOption('NONE');
+    } else if ((request as any).vatRate !== undefined) {
+      const r = Number((request as any).vatRate);
+      setVatOption(r > 0 ? r.toString() : 'NONE');
+    } else {
+      setVatOption('NONE');
+    }
+  }, [request?.id, request?.note]);
 
   if (!isOpen || !request) return null;
 
@@ -115,20 +136,6 @@ export const PRDetailModal: React.FC<PRDetailModalProps> = ({
 
   const totalQuantity = items.reduce((sum, it) => sum + (Number(it.quantity) || 0), 0);
   const totalEstimatedAmount = items.reduce((sum, it) => sum + (it.totalPrice || 0), 0);
-
-  // User/Creator VAT Option: Can be NONE (0%), 8%, or 10%
-  const [vatOption, setVatOption] = useState<string>(() => {
-    const note = (request?.note || '').toUpperCase();
-    if (note.includes('[VAT:10]') || note.includes('VAT 10%') || note.includes('THUẾ 10%')) return '10';
-    if (note.includes('[VAT:8]') || note.includes('VAT 8%') || note.includes('THUẾ 8%')) return '8';
-    if (note.includes('[VAT:0]') || note.includes('KHÔNG TÍNH THUẾ') || note.includes('KHÔNG CÓ THUẾ') || note.includes('CHƯA GỒM VAT')) return 'NONE';
-    if ((request as any)?.vatRate !== undefined) {
-      const r = Number((request as any).vatRate);
-      return r > 0 ? r.toString() : 'NONE';
-    }
-    // Default to NONE (Không có thuế)
-    return 'NONE';
-  });
 
   const vatRate = (vatOption === 'NONE' || vatOption === '0') ? 0 : Number(vatOption);
   const vatAmount = Math.round(totalEstimatedAmount * (vatRate / 100));
