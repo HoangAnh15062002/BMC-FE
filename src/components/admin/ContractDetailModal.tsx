@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Contract, ContractAppendix } from '../../types';
 import { adminApi, uploadApi } from '../../api';
 import { formatCurrency, formatDate } from '../../utils/formatters';
+import { exportContractToWord } from '../../utils/wordExport';
 import {
   X,
   FileText,
@@ -16,6 +17,7 @@ import {
   Download,
   FileCheck,
   Eye,
+  FileEdit,
   CheckCircle2,
 } from 'lucide-react';
 
@@ -36,8 +38,10 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
   const [showAddAppendix, setShowAddAppendix] = useState(false);
   const [submittingAppendix, setSubmittingAppendix] = useState(false);
   const [uploadingScan, setUploadingScan] = useState(false);
+  const [uploadingWord, setUploadingWord] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const wordInputRef = useRef<HTMLInputElement>(null);
 
   // New appendix form
   const [appForm, setAppForm] = useState({
@@ -47,12 +51,26 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
     content: '',
   });
 
+  const getAttachedWord = (c: Contract | null): { url: string; fileName: string } | null => {
+    if (!c) return null;
+    if (c.wordFileUrl) return { url: c.wordFileUrl, fileName: 'hop_dong_goc.docx' };
+    if (!c.description) return null;
+    try {
+      const parsed = JSON.parse(c.description);
+      if (parsed.wordUrl) return { url: parsed.wordUrl, fileName: parsed.fileName || 'hop_dong_goc.docx' };
+    } catch {
+      if (c.description.endsWith('.docx') || c.description.endsWith('.doc')) {
+        return { url: c.description, fileName: 'hop_dong_goc.docx' };
+      }
+    }
+    return null;
+  };
+
   const loadContract = async () => {
     setLoading(true);
     try {
       const data = await adminApi.getContractById(contractId);
       setContract(data);
-      // If contract doesn't have a fileUrl, default to 'agreement' tab, otherwise 'scan'
       if (!data.fileUrl) {
         setActiveTab('agreement');
       } else {
@@ -81,7 +99,6 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
     setUploadingScan(true);
     try {
       const uploadRes = await uploadApi.uploadFile(file);
-      // Update contract fileUrl
       await adminApi.updateContract(contract.id, {
         contractName: contract.contractName,
         contractValue: contract.contractValue,
@@ -100,6 +117,68 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
     } finally {
       setUploadingScan(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleUploadWordDoc = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !contract) return;
+
+    const isWord =
+      file.name.toLowerCase().endsWith('.doc') ||
+      file.name.toLowerCase().endsWith('.docx') ||
+      file.type.includes('word') ||
+      file.type.includes('officedocument');
+
+    if (!isWord) {
+      alert('Vui lòng chọn tệp Word (.doc hoặc .docx)!');
+      return;
+    }
+
+    setUploadingWord(true);
+    try {
+      const uploadRes = await uploadApi.uploadFile(file);
+      const descData = JSON.stringify({
+        wordUrl: uploadRes.url,
+        fileName: file.name,
+        uploadedAt: new Date().toISOString(),
+      });
+
+      await adminApi.updateContract(contract.id, {
+        contractName: contract.contractName,
+        contractValue: contract.contractValue,
+        vatRate: contract.vatRate || 10,
+        signedDate: contract.signedDate ? contract.signedDate.slice(0, 10) : undefined,
+        fileUrl: contract.fileUrl || undefined,
+        description: descData,
+      });
+
+      alert('Đã tải lên và đính kèm file Word hợp đồng gốc thành công!');
+      await loadContract();
+      if (onUpdated) onUpdated();
+    } catch (err: any) {
+      console.error(err);
+      alert(err.response?.data?.message || 'Lỗi khi tải lên file Word');
+    } finally {
+      setUploadingWord(false);
+      if (wordInputRef.current) wordInputRef.current.value = '';
+    }
+  };
+
+  const handleDownloadWord = () => {
+    if (!contract) return;
+    const attached = getAttachedWord(contract);
+    if (attached) {
+      // Direct download of uploaded file
+      const link = document.createElement('a');
+      link.href = attached.url;
+      link.download = attached.fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } else {
+      // Export current agreement to Word
+      exportContractToWord(contract);
     }
   };
 
@@ -200,8 +279,8 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
           </div>
 
           <div class="legal-base">
-            - Căn cứ Bộ Luật Dân sự số 91/2015/QH13 đã được Quốc hội nước CHXHCN Việt Nam thông qua ngày 24/11/2015;<br>
-            - Căn cứ Luật Xây dựng số 50/2014/QH13 ngày 18/06/2014 và Luật Xây dựng sửa đổi số 62/2020/QH14;<br>
+            - Căn cứ Bộ Luật Dân sự số 91/2015/QH13 ngày 24/11/2015 của Quốc hội nước CHXHCN Việt Nam;<br>
+            - Căn cứ Luật Xây dựng số 50/2014/QH13 và Luật Xây dựng sửa đổi số 62/2020/QH14;<br>
             - Căn cứ Nghị định số 37/2015/NĐ-CP ngày 22/04/2015 của Chính phủ quy định chi tiết về hợp đồng xây dựng;<br>
             - Căn cứ vào hồ sơ dự thầu, hồ sơ thiết kế bản vẽ thi công và thỏa thuận giữa hai bên.
           </div>
@@ -323,6 +402,8 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
     0
   );
 
+  const attachedWord = getAttachedWord(contract);
+
   return (
     <div
       style={{
@@ -343,9 +424,9 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
       <div
         className="card"
         style={{
-          width: '1080px',
+          width: '1100px',
           maxWidth: '100%',
-          height: '94vh',
+          height: '95vh',
           display: 'flex',
           flexDirection: 'column',
           boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
@@ -354,7 +435,7 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
           padding: 0,
         }}
       >
-        {/* Hidden File Input for PDF upload */}
+        {/* Hidden File Inputs */}
         <input
           type="file"
           ref={fileInputRef}
@@ -362,8 +443,15 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
           style={{ display: 'none' }}
           onChange={handleUploadScanPdf}
         />
+        <input
+          type="file"
+          ref={wordInputRef}
+          accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          style={{ display: 'none' }}
+          onChange={handleUploadWordDoc}
+        />
 
-        {/* Header */}
+        {/* Top Header */}
         <div
           style={{
             padding: '16px 24px',
@@ -390,7 +478,7 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
               <FileText size={24} />
             </div>
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                 <span
                   style={{
                     fontWeight: 700,
@@ -419,7 +507,25 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
                       borderRadius: '6px',
                     }}
                   >
-                    <FileCheck size={12} /> Đã có bản scan PDF (Dấu đỏ)
+                    <FileCheck size={12} /> Đã có scan PDF (Dấu đỏ)
+                  </span>
+                )}
+                {attachedWord && (
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      color: '#2563eb',
+                      backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                      border: '1px solid rgba(37, 99, 235, 0.2)',
+                      padding: '2px 8px',
+                      borderRadius: '6px',
+                    }}
+                  >
+                    <FileEdit size={12} /> Đã đính kèm file Word
                   </span>
                 )}
               </div>
@@ -433,18 +539,6 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
           </div>
 
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            {/* Upload PDF button */}
-            <button
-              className="btn btn-secondary btn-sm"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploadingScan}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-              title="Tải lên tệp scan PDF hợp đồng có dấu đỏ thực tế"
-            >
-              <UploadCloud size={15} style={{ color: 'var(--orange-primary)' }} />
-              {uploadingScan ? 'Đang tải lên...' : contract.fileUrl ? 'Đổi File Scan PDF' : 'Tải Lên Scan PDF'}
-            </button>
-
             <button
               className="btn btn-secondary btn-sm"
               onClick={handlePrint}
@@ -494,8 +588,104 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
           </div>
         </div>
 
+        {/* Dedicated Dual Document Toolbar (WORD & PDF) */}
+        <div
+          style={{
+            padding: '12px 24px',
+            backgroundColor: '#ffffff',
+            borderBottom: '1px solid var(--border-color)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '12px',
+          }}
+        >
+          {/* WORD Actions */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1d4ed8', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <FileEdit size={16} /> File Word (Hợp Đồng Gốc):
+            </span>
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={handleDownloadWord}
+              style={{
+                backgroundColor: '#2563eb',
+                borderColor: '#1d4ed8',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+              title="Tải về file Word (.doc/.docx) để mở và chỉnh sửa trên máy tính"
+            >
+              <Download size={14} /> Tải File Word Hợp Đồng Gốc
+            </button>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => wordInputRef.current?.click()}
+              disabled={uploadingWord}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+              title="Đính kèm file Word (.docx) soạn thảo gốc vào hồ sơ"
+            >
+              <UploadCloud size={14} /> {uploadingWord ? 'Đang tải...' : attachedWord ? 'Đổi File Word' : 'Đính Kèm File Word'}
+            </button>
+          </div>
+
+          {/* PDF Actions */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#dc2626', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <FileText size={16} /> File PDF (Hợp Đồng Scan Dấu Đỏ):
+            </span>
+            {contract.fileUrl ? (
+              <>
+                <a
+                  href={contract.fileUrl}
+                  download={`${contract.contractNo}_ScanDauDo.pdf`}
+                  className="btn btn-secondary btn-sm"
+                  style={{
+                    color: '#dc2626',
+                    borderColor: 'rgba(239, 68, 68, 0.4)',
+                    backgroundColor: 'rgba(239, 68, 68, 0.05)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    textDecoration: 'none',
+                    fontWeight: 600,
+                  }}
+                  title="Tải về file PDF scan hợp đồng có dấu đỏ"
+                >
+                  <Download size={14} /> Tải File Scan PDF
+                </a>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingScan}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <UploadCloud size={14} /> {uploadingScan ? 'Đang tải...' : 'Đổi File Scan PDF'}
+                </button>
+              </>
+            ) : (
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingScan}
+                style={{
+                  color: '#dc2626',
+                  borderColor: 'rgba(239, 68, 68, 0.4)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                <UploadCloud size={14} /> {uploadingScan ? 'Đang tải...' : 'Tải Lên Scan PDF'}
+              </button>
+            )}
+          </div>
+        </div>
+
         {/* Tab Switcher */}
-        <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', padding: '0 24px', backgroundColor: '#ffffff' }}>
+        <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', padding: '0 24px', backgroundColor: '#f8fafc' }}>
           <button
             onClick={() => setActiveTab('scan')}
             style={{
@@ -534,7 +724,7 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
               gap: '8px',
             }}
           >
-            <BookOpen size={16} /> 📜 Tóm Lược Điều Khoản Hợp Đồng
+            <BookOpen size={16} /> 📜 Văn Bản Điều Khoản Hợp Đồng & Xuất Word
           </button>
 
           <button
@@ -579,7 +769,7 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem' }}>
                       <FileCheck size={16} style={{ color: '#22c55e' }} />
                       <span>
-                        Tệp scan hợp đồng: <strong>{contract.fileUrl.split('/').pop()}</strong>
+                        Tệp scan hợp đồng (Dấu đỏ): <strong>{contract.fileUrl.split('/').pop()}</strong>
                       </span>
                     </div>
                     <div style={{ display: 'flex', gap: '10px' }}>
@@ -594,18 +784,18 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
                       </a>
                       <a
                         href={contract.fileUrl}
-                        download={`${contract.contractNo}.pdf`}
+                        download={`${contract.contractNo}_ScanDauDo.pdf`}
                         className="btn btn-secondary btn-sm"
                         style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', textDecoration: 'none', color: '#ffffff', backgroundColor: '#334155', border: '1px solid #475569' }}
                       >
-                        <Download size={14} /> Tải Về Máy
+                        <Download size={14} /> Tải File Scan PDF
                       </a>
                       <button
                         className="btn btn-primary btn-sm"
                         onClick={() => fileInputRef.current?.click()}
                         style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                       >
-                        <UploadCloud size={14} /> Tải Bản Scan Khác
+                        <UploadCloud size={14} /> Đổi Bản Scan Khác
                       </button>
                     </div>
                   </div>
@@ -651,7 +841,7 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
                     Chưa Lưu Bản Scan PDF Hợp Đồng Ký Dấu Đỏ
                   </h3>
                   <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: '20px' }}>
-                    Hợp đồng xây dựng thường được in ra ký tên và đóng dấu đỏ hai bên. Bạn hãy chụp hoặc quét bản scan PDF của hợp đồng này và tải lên để lưu trữ trọn đời trong hồ sơ công trình.
+                    Hợp đồng xây dựng sau khi in ra ký tên và đóng dấu đỏ hai bên, hãy quét (scan) tệp PDF và tải lên đây để lưu trữ pháp lý và đối soát công trình.
                   </p>
                   <button
                     className="btn btn-primary"
@@ -667,9 +857,51 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
             </div>
           )}
 
-          {/* TAB 2: TÓM LƯỢC ĐIỀU KHOẢN HỢP ĐỒNG */}
+          {/* TAB 2: VĂN BẢN ĐIỀU KHOẢN HỢP ĐỒNG & XUẤT WORD */}
           {activeTab === 'agreement' && (
             <div style={{ padding: '24px' }}>
+              {/* Word Export Banner */}
+              <div
+                style={{
+                  padding: '14px 20px',
+                  borderRadius: '12px',
+                  backgroundColor: 'rgba(37, 99, 235, 0.06)',
+                  border: '1px solid rgba(37, 99, 235, 0.2)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  marginBottom: '20px',
+                  flexWrap: 'wrap',
+                  gap: '12px',
+                }}
+              >
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '0.95rem', color: '#1d4ed8', fontWeight: 700 }}>
+                    📄 Bản Soạn Thảo Hợp Đồng Gốc (Microsoft Word)
+                  </h4>
+                  <p style={{ margin: '2px 0 0 0', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                    Bạn có thể tải tệp Word hoàn chỉnh về máy để chỉnh sửa các điều khoản theo thỏa thuận.
+                  </p>
+                </div>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={handleDownloadWord}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    <Download size={14} /> Tải Về Bản Word (.doc)
+                  </button>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => wordInputRef.current?.click()}
+                    disabled={uploadingWord}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    <UploadCloud size={14} /> {attachedWord ? 'Tải Lên Bản Word Mới' : 'Đính Kèm File Word'}
+                  </button>
+                </div>
+              </div>
+
               <div
                 style={{
                   backgroundColor: '#ffffff',
@@ -937,7 +1169,7 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
         <div style={{ padding: '12px 24px', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-card-subtle, #f8fafc)' }}>
           <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
             <FileCheck size={14} style={{ color: 'var(--emerald-success)' }} />
-            Hệ thống Quản trị Hợp đồng Thi công & Lưu trữ Scan PDF - BMC Construction ERP
+            Quản trị Hợp đồng Thi công BMC: Tải file Word gốc (.doc) và Lưu trữ Scan PDF (Dấu đỏ)
           </div>
           <button className="btn btn-secondary" onClick={onClose}>
             Đóng

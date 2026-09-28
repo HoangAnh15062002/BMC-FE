@@ -430,6 +430,7 @@ export interface Contract {
   startDate?: string;
   endDate?: string;
   fileUrl?: string;
+  wordFileUrl?: string;
   description?: string;
 }
 

@@ -23,10 +23,13 @@ import {
   Sparkles,
   UploadCloud,
   FileCheck,
+  Download,
+  FileEdit,
 } from 'lucide-react';
 import { InvestorDetailModal } from '../components/admin/InvestorDetailModal';
 import { ContractDetailModal } from '../components/admin/ContractDetailModal';
 import { PdfViewerModal } from '../components/common/PdfViewerModal';
+import { exportContractToWord } from '../utils/wordExport';
 
 export const AdminPage: React.FC = () => {
   const [tab, setTab] = useState<'investors' | 'contracts' | 'members' | 'partners'>('investors');
@@ -70,6 +73,7 @@ export const AdminPage: React.FC = () => {
   // Modal: Create Contract
   const [showCtrModal, setShowCtrModal] = useState(false);
   const [uploadingCtrPdf, setUploadingCtrPdf] = useState(false);
+  const [uploadingCtrWord, setUploadingCtrWord] = useState(false);
   const [ctrForm, setCtrForm] = useState({
     projectId: '',
     contractNo: '',
@@ -78,6 +82,8 @@ export const AdminPage: React.FC = () => {
     contractValue: '',
     vatRate: '10',
     fileUrl: '',
+    wordUrl: '',
+    wordFileName: '',
   });
 
   // Modal: Add Member to Ban Chỉ Huy
@@ -189,6 +195,10 @@ export const AdminPage: React.FC = () => {
     }
     setSubmitting(true);
     try {
+      const descObj = ctrForm.wordUrl
+        ? JSON.stringify({ wordUrl: ctrForm.wordUrl, fileName: ctrForm.wordFileName })
+        : undefined;
+
       await adminApi.createContract({
         projectId: Number(ctrForm.projectId),
         contractNo: ctrForm.contractNo.trim(),
@@ -197,6 +207,7 @@ export const AdminPage: React.FC = () => {
         contractValue: Number(ctrForm.contractValue) || 0,
         vatRate: Number(ctrForm.vatRate) || 10,
         fileUrl: ctrForm.fileUrl || undefined,
+        description: descObj,
       });
       setShowCtrModal(false);
       setCtrForm({
@@ -207,6 +218,8 @@ export const AdminPage: React.FC = () => {
         contractValue: '',
         vatRate: '10',
         fileUrl: '',
+        wordUrl: '',
+        wordFileName: '',
       });
       alert('Thêm hợp đồng thi công thành công!');
       loadData();
@@ -784,7 +797,45 @@ export const AdminPage: React.FC = () => {
                       <span className="badge badge-active">{c.status || 'ACTIVE'}</span>
                     </td>
                     <td style={{ textAlign: 'center' }}>
-                      <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                      <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', flexWrap: 'nowrap' }}>
+                        {/* Download Word draft */}
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (c.description) {
+                              try {
+                                const parsed = JSON.parse(c.description);
+                                if (parsed.wordUrl) {
+                                  const link = document.createElement('a');
+                                  link.href = parsed.wordUrl;
+                                  link.download = parsed.fileName || `${c.contractNo}.docx`;
+                                  document.body.appendChild(link);
+                                  link.click();
+                                  document.body.removeChild(link);
+                                  return;
+                                }
+                              } catch {}
+                            }
+                            exportContractToWord(c);
+                          }}
+                          title="Tải về file Word (.doc/.docx) hợp đồng gốc để chỉnh sửa"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            color: '#2563eb',
+                            borderColor: 'rgba(37, 99, 235, 0.35)',
+                            backgroundColor: 'rgba(37, 99, 235, 0.06)',
+                            whiteSpace: 'nowrap',
+                            fontWeight: 600,
+                          }}
+                        >
+                          <Download size={13} /> Tải Word
+                        </button>
+
+                        {/* View Scan PDF */}
                         {c.fileUrl && (
                           <button
                             type="button"
@@ -803,15 +854,16 @@ export const AdminPage: React.FC = () => {
                               alignItems: 'center',
                               gap: '4px',
                               color: '#ef4444',
-                              borderColor: 'rgba(239, 68, 68, 0.3)',
-                              backgroundColor: 'rgba(239, 68, 68, 0.05)',
+                              borderColor: 'rgba(239, 68, 68, 0.35)',
+                              backgroundColor: 'rgba(239, 68, 68, 0.06)',
                               whiteSpace: 'nowrap',
                               fontWeight: 600,
                             }}
                           >
-                            <FileText size={14} /> Scan PDF
+                            <FileText size={13} /> Scan PDF
                           </button>
                         )}
+
                         <button
                           type="button"
                           className="btn btn-primary btn-sm"
@@ -822,7 +874,7 @@ export const AdminPage: React.FC = () => {
                           title="Xem toàn văn hợp đồng & phụ lục"
                           style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}
                         >
-                          <Eye size={14} /> Chi Tiết
+                          <Eye size={13} /> Chi Tiết
                         </button>
                       </div>
                     </td>
@@ -1177,14 +1229,52 @@ export const AdminPage: React.FC = () => {
                   )}
                 </div>
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-                  Hỗ trợ tải lên file PDF scan hợp đồng gốc có chữ ký & con dấu đỏ pháp lý
+                  Bản scan PDF có chữ ký và con dấu đỏ pháp lý hai bên
+                </div>
+              </div>
+
+              {/* Upload original editable Word file */}
+              <div className="form-group">
+                <label className="form-label">Tệp Word Hợp Đồng Gốc (.docx / .doc)</label>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                  <input
+                    type="file"
+                    accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    className="form-input"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      setUploadingCtrWord(true);
+                      try {
+                        const res = await uploadApi.uploadFile(file);
+                        setCtrForm((prev) => ({
+                          ...prev,
+                          wordUrl: res.url,
+                          wordFileName: file.name,
+                        }));
+                        alert('Đã tải lên tệp Word hợp đồng gốc thành công!');
+                      } catch (err: any) {
+                        alert(err.response?.data?.message || 'Lỗi khi tải lên tệp Word');
+                      } finally {
+                        setUploadingCtrWord(false);
+                      }
+                    }}
+                  />
+                  {ctrForm.wordUrl && (
+                    <span style={{ fontSize: '0.8rem', color: '#2563eb', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                      ✓ Đã đính kèm Word
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                  Bản mềm Word để lưu trữ và soạn thảo điều khoản hợp đồng
                 </div>
               </div>
 
               <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '20px' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setShowCtrModal(false)}>Hủy</button>
-                <button type="submit" className="btn btn-primary" disabled={submitting || uploadingCtrPdf}>
-                  {submitting ? 'Đang lưu...' : uploadingCtrPdf ? 'Đang tải PDF...' : 'Lưu Hợp Đồng'}
+                <button type="submit" className="btn btn-primary" disabled={submitting || uploadingCtrPdf || uploadingCtrWord}>
+                  {submitting ? 'Đang lưu...' : (uploadingCtrPdf || uploadingCtrWord) ? 'Đang tải file...' : 'Lưu Hợp Đồng'}
                 </button>
               </div>
             </form>
