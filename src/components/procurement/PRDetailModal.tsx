@@ -367,7 +367,7 @@ export const PRDetailModal: React.FC<PRDetailModalProps> = ({
         <table class="header-table">
           <tr>
             <td style="width: 60%;">
-              <div class="company-name">CÔNG TY CỔ PHẦN ĐẦU TƯ VÀ XÂY DỰNG BMC</div>
+              <div class="company-name">CÔNG TY CỔ PHẦN XÂY DỰNG KỸ THUẬT BMC</div>
               <div class="company-sub">Hệ Thống ERP Quản Lý Thi Công & Dự Án Xây Dựng</div>
               <div class="company-sub">Ban Quản Lý Dự Án - Phòng Cung Ứng & Vật Tư</div>
             </td>
