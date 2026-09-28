@@ -140,18 +140,6 @@ export const PRDetailModal: React.FC<PRDetailModalProps> = ({
   const vatRate = (vatOption === 'NONE' || vatOption === '0') ? 0 : Number(vatOption);
   const vatAmount = Math.round(totalEstimatedAmount * (vatRate / 100));
   const totalWithVat = totalEstimatedAmount + vatAmount;
-  
-  // Executive Budget Simulation for Director
-  const taskBudgetTotal = Math.round(totalWithVat * 1.4); // Dự toán được duyệt cho công tác này
-  const taskAccumulatedSpent = Math.round(totalWithVat * 0.45); // Lũy kế đã chi mua sắm trước đó
-  const remainingBudgetBefore = taskBudgetTotal - taskAccumulatedSpent;
-  const remainingBudgetAfter = remainingBudgetBefore - totalWithVat;
-  const budgetUsagePercent = Math.min(100, Math.round(((taskAccumulatedSpent + totalWithVat) / taskBudgetTotal) * 100));
-
-  // Cashflow Outflow Timeline Simulation
-  const advancePayment = Math.round(totalWithVat * 0.3); // 30% Tạm ứng đặt cọc
-  const deliveryPayment = Math.round(totalWithVat * 0.6); // 60% Khi giao vật tư đến chân công trình
-  const retentionPayment = Math.round(totalWithVat * 0.1); // 10% Quyết toán & bảo hành
 
   const handleApprove = async () => {
     if (onApprove) {
@@ -647,103 +635,7 @@ export const PRDetailModal: React.FC<PRDetailModalProps> = ({
             </div>
           </div>
 
-          {/* Section: Executive Cash Flow & Budget Control Panel */}
-          <div
-            style={{
-              marginBottom: '24px',
-              padding: '18px 20px',
-              borderRadius: '12px',
-              backgroundColor: '#fff7ed',
-              border: '1.5px solid #fed7aa',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <DollarSign size={20} color="var(--brand-500)" />
-                <h3 style={{ fontSize: '15px', fontWeight: 800, margin: 0, color: '#c2410c' }}>
-                  Bảng Thẩm Định Dòng Tiền & Kiểm Soát Ngân Sách (Dành Cho Giám Đốc)
-                </h3>
-              </div>
-              <span
-                style={{
-                  fontSize: '12px',
-                  fontWeight: 700,
-                  padding: '4px 12px',
-                  borderRadius: '20px',
-                  backgroundColor: budgetUsagePercent > 90 ? '#fee2e2' : '#dcfce7',
-                  color: budgetUsagePercent > 90 ? '#b91c1c' : '#15803d',
-                  border: `1px solid ${budgetUsagePercent > 90 ? '#fecaca' : '#bbf7d0'}`,
-                }}
-              >
-                Tiêu hao ngân sách công tác: {budgetUsagePercent}%
-              </span>
-            </div>
 
-            {/* 3 Metric Cards for Cash Flow */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px', marginBottom: '14px' }}>
-              <div style={{ backgroundColor: '#ffffff', padding: '12px 16px', borderRadius: '10px', border: '1px solid #fed7aa' }}>
-                <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 700 }}>DỰ TOÁN NGÂN SÁCH ĐƯỢC DUYỆT</span>
-                <div style={{ fontSize: '16px', fontWeight: 800, color: '#0f172a', marginTop: '4px' }}>
-                  {formatCurrency(taskBudgetTotal)}
-                </div>
-                <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
-                  Hạn mức tối đa cho công tác này
-                </div>
-              </div>
-
-              <div style={{ backgroundColor: '#ffffff', padding: '12px 16px', borderRadius: '10px', border: '1px solid #fed7aa' }}>
-                <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 700 }}>ĐÃ CHI MUA LŨY KẾ + PHIẾU NÀY</span>
-                <div style={{ fontSize: '16px', fontWeight: 800, color: '#ea580c', marginTop: '4px' }}>
-                  {formatCurrency(taskAccumulatedSpent + totalEstimatedAmount)}
-                </div>
-                <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
-                  Đã chi: {formatCurrency(taskAccumulatedSpent)} | Phiếu này: {formatCurrency(totalEstimatedAmount)}
-                </div>
-              </div>
-
-              <div style={{ backgroundColor: '#ffffff', padding: '12px 16px', borderRadius: '10px', border: '1px solid #fed7aa' }}>
-                <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 700 }}>NGÂN SÁCH CÒN LẠI SAU DUYỆT</span>
-                <div
-                  style={{
-                    fontSize: '16px',
-                    fontWeight: 800,
-                    color: remainingBudgetAfter >= 0 ? '#16a34a' : '#dc2626',
-                    marginTop: '4px',
-                  }}
-                >
-                  {formatCurrency(remainingBudgetAfter)}
-                </div>
-                <div style={{ fontSize: '11px', color: remainingBudgetAfter >= 0 ? '#15803d' : '#b91c1c', marginTop: '2px' }}>
-                  {remainingBudgetAfter >= 0 ? '✓ Nằm trong hạn mức an toàn' : '⚠ Cảnh báo: Vượt dự toán được duyệt!'}
-                </div>
-              </div>
-            </div>
-
-            {/* Cash Outflow Timeline */}
-            <div style={{ backgroundColor: '#ffffff', padding: '14px 16px', borderRadius: '10px', border: '1px solid #fed7aa' }}>
-              <div style={{ fontSize: '12px', fontWeight: 800, color: '#c2410c', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '7px' }}>
-                <CreditCard size={16} />
-                <span>KẾ HOẠCH DÒNG TIỀN RA DỰ KIẾN CẦN CHUẨN BỊ (CASH OUTFLOW SCHEDULE):</span>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px', fontSize: '13px' }}>
-                <div style={{ borderLeft: '3px solid #f59e0b', paddingLeft: '10px' }}>
-                  <div style={{ color: '#64748b', fontSize: '12px' }}>1. Tạm ứng đặt cọc (30%):</div>
-                  <div style={{ fontWeight: 800, color: '#0f172a', marginTop: '2px', fontSize: '15px' }}>{formatCurrency(advancePayment)}</div>
-                  <div style={{ fontSize: '11px', color: '#94a3b8' }}>Cần xuất quỹ ngay khi ký đơn hàng PO</div>
-                </div>
-                <div style={{ borderLeft: '3px solid #3b82f6', paddingLeft: '10px' }}>
-                  <div style={{ color: '#64748b', fontSize: '12px' }}>2. Khi giao hàng tại kho (60%):</div>
-                  <div style={{ fontWeight: 800, color: '#0f172a', marginTop: '2px', fontSize: '15px' }}>{formatCurrency(deliveryPayment)}</div>
-                  <div style={{ fontSize: '11px', color: '#94a3b8' }}>Dự kiến sau 3-5 ngày sau khi duyệt</div>
-                </div>
-                <div style={{ borderLeft: '3px solid #10b981', paddingLeft: '10px' }}>
-                  <div style={{ color: '#64748b', fontSize: '12px' }}>3. Quyết toán & bảo hành (10%):</div>
-                  <div style={{ fontWeight: 800, color: '#0f172a', marginTop: '2px', fontSize: '15px' }}>{formatCurrency(retentionPayment)}</div>
-                  <div style={{ fontSize: '11px', color: '#94a3b8' }}>Theo thỏa thuận bảo hành với NCC</div>
-                </div>
-              </div>
-            </div>
-          </div>
 
           {/* Section: Table of Materials */}
           <div style={{ marginBottom: '24px' }}>
