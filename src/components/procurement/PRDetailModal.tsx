@@ -183,7 +183,325 @@ export const PRDetailModal: React.FC<PRDetailModalProps> = ({
   };
 
   const handlePrint = () => {
-    window.print();
+    const prNo = request.requestNo || request.requestCode || 'PR';
+    const reqDate = formatDate(request.requestDate || request.createdAt);
+    const projectName = request.projectName || 'Dự án Xây dựng BMC';
+    const itemName = request.projectItemName || '';
+    const taskName = request.projectTaskName || '';
+    const wbsText = [itemName, taskName].filter(Boolean).join(' - ') || 'Toàn dự án';
+    const requester = request.requestedByName || request.createdByName || 'Ban chỉ huy công trường';
+    const approver = request.approvedByName || 'Ban Giám Đốc BMC';
+    const note = request.note || '';
+    const statusText = getPurchaseStatusLabel(request.status);
+
+    const now = new Date();
+    const day = String(now.getDate()).padStart(2, '0');
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const year = now.getFullYear();
+
+    const vatLabel = (vatOption === 'NONE' || vatOption === '0') ? 'Không tính thuế' : `Thuế VAT (${vatOption}%)`;
+
+    const rowsHtml = items.map((it, idx) => `
+      <tr>
+        <td style="text-align: center;">${idx + 1}</td>
+        <td style="font-family: monospace; font-weight: 600; text-align: center;">${it.materialCode || '-'}</td>
+        <td style="font-weight: 600;">${it.materialName || '-'}</td>
+        <td style="text-align: center;">${getUnitDisplay(it)}</td>
+        <td>${it.projectTaskName || it.projectItemName || '-'}</td>
+        <td style="text-align: right; font-weight: 600;">${formatNumber(it.quantity)}</td>
+        <td style="text-align: right;">${formatCurrency(it.estimatedPrice)}</td>
+        <td style="text-align: right; font-weight: 700;">${formatCurrency(it.totalPrice)}</td>
+        <td>${it.note || ''}</td>
+      </tr>
+    `).join('');
+
+    const printHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Phiếu Đề Xuất Mua Sắm Vật Tư - ${prNo}</title>
+        <style>
+          @page {
+            size: A4 portrait;
+            margin: 14mm 12mm 14mm 12mm;
+          }
+          * {
+            box-sizing: border-box;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          body {
+            font-family: "Times New Roman", Times, serif;
+            color: #0f172a;
+            background: #ffffff;
+            margin: 0;
+            padding: 0;
+            font-size: 13px;
+            line-height: 1.4;
+          }
+          .header-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 12px;
+          }
+          .header-table td {
+            vertical-align: top;
+            padding: 0;
+          }
+          .company-name {
+            font-size: 13px;
+            font-weight: bold;
+            text-transform: uppercase;
+            color: #1e3a8a;
+          }
+          .company-sub {
+            font-size: 11px;
+            color: #475569;
+            margin-top: 3px;
+          }
+          .form-badge {
+            text-align: right;
+            font-size: 11.5px;
+          }
+          .doc-header {
+            text-align: center;
+            margin: 14px 0 16px 0;
+          }
+          .doc-title {
+            font-size: 18px;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin: 0;
+            letter-spacing: 0.5px;
+          }
+          .doc-subtitle {
+            font-size: 12px;
+            font-style: italic;
+            color: #475569;
+            margin-top: 4px;
+          }
+          .info-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 14px;
+          }
+          .info-table td {
+            padding: 3px 4px;
+            font-size: 12px;
+            vertical-align: top;
+          }
+          .info-label {
+            font-weight: bold;
+            color: #334155;
+            white-space: nowrap;
+          }
+          .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 12px;
+          }
+          .items-table th, .items-table td {
+            border: 1px solid #334155;
+            padding: 6px 5px;
+            font-size: 11.5px;
+          }
+          .items-table th {
+            background-color: #f1f5f9 !important;
+            font-weight: bold;
+            text-align: center;
+            text-transform: uppercase;
+            font-size: 10.5px;
+            color: #0f172a;
+          }
+          .total-row td {
+            font-weight: bold;
+            background-color: #f8fafc !important;
+          }
+          .grand-total td {
+            font-weight: bold;
+            font-size: 12px;
+            background-color: #e2e8f0 !important;
+          }
+          .signatures-container {
+            margin-top: 24px;
+            page-break-inside: avoid;
+          }
+          .date-location {
+            text-align: right;
+            font-style: italic;
+            font-size: 12px;
+            margin-bottom: 10px;
+          }
+          .sig-table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: center;
+          }
+          .sig-table td {
+            width: 25%;
+            vertical-align: top;
+            padding: 0 4px;
+          }
+          .sig-role {
+            font-weight: bold;
+            font-size: 11px;
+            text-transform: uppercase;
+          }
+          .sig-caption {
+            font-style: italic;
+            font-size: 10px;
+            color: #64748b;
+            margin-top: 2px;
+          }
+          .sig-space {
+            height: 60px;
+          }
+          .sig-name {
+            font-weight: bold;
+            font-size: 11.5px;
+          }
+        </style>
+      </head>
+      <body>
+        <table class="header-table">
+          <tr>
+            <td style="width: 60%;">
+              <div class="company-name">CÔNG TY CỔ PHẦN ĐẦU TƯ VÀ XÂY DỰNG BMC</div>
+              <div class="company-sub">Hệ Thống ERP Quản Lý Thi Công & Dự Án Xây Dựng</div>
+              <div class="company-sub">Ban Quản Lý Dự Án - Phòng Cung Ứng & Vật Tư</div>
+            </td>
+            <td class="form-badge" style="width: 40%;">
+              <div><strong>Mẫu:</strong> 01-ĐXVT/BMC</div>
+              <div style="margin-top: 2px;"><strong>Số phiếu:</strong> <span style="font-family: monospace; font-size: 13px; font-weight: bold;">${prNo}</span></div>
+              <div style="margin-top: 2px;"><strong>Ngày lập:</strong> ${reqDate}</div>
+              <div style="margin-top: 2px;"><strong>Trạng thái:</strong> ${statusText}</div>
+            </td>
+          </tr>
+        </table>
+
+        <div class="doc-header">
+          <div class="doc-title">PHIẾU ĐỀ XUẤT MUA SẮM VẬT TƯ</div>
+          <div class="doc-subtitle">(Dùng cho công trường / dự án thi công)</div>
+        </div>
+
+        <table class="info-table">
+          <tr>
+            <td class="info-label" style="width: 15%;">Dự án / Công trình:</td>
+            <td style="width: 45%; font-weight: bold;">${projectName}</td>
+            <td class="info-label" style="width: 15%;">Người đề xuất:</td>
+            <td style="width: 25%; font-weight: bold;">${requester}</td>
+          </tr>
+          <tr>
+            <td class="info-label">Hạng mục / Công tác:</td>
+            <td>${wbsText}</td>
+            <td class="info-label">Đơn vị đề xuất:</td>
+            <td>Ban Chỉ Huy Công Trường</td>
+          </tr>
+          ${note ? `
+          <tr>
+            <td class="info-label">Ghi chú / Giải trình:</td>
+            <td colspan="3" style="font-style: italic;">${note}</td>
+          </tr>
+          ` : ''}
+        </table>
+
+        <table class="items-table">
+          <thead>
+            <tr>
+              <th style="width: 32px;">STT</th>
+              <th style="width: 95px;">Mã VT</th>
+              <th>Tên quy cách tiêu chuẩn vật tư</th>
+              <th style="width: 45px;">ĐVT</th>
+              <th style="width: 150px;">Công tác / Vị trí</th>
+              <th style="width: 65px;">Khối lượng</th>
+              <th style="width: 85px;">Đơn giá (VNĐ)</th>
+              <th style="width: 95px;">Thành tiền (VNĐ)</th>
+              <th style="width: 85px;">Ghi chú</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+            <tr class="total-row">
+              <td colspan="5" style="text-align: right; text-transform: uppercase;">Cộng tiền hàng (Chưa thuế):</td>
+              <td style="text-align: right;">${formatNumber(totalQuantity)}</td>
+              <td></td>
+              <td style="text-align: right; color: #1e3a8a;">${formatCurrency(totalEstimatedAmount)}</td>
+              <td></td>
+            </tr>
+            <tr class="total-row">
+              <td colspan="7" style="text-align: right;">${vatLabel}:</td>
+              <td style="text-align: right;">${formatCurrency(vatAmount)}</td>
+              <td></td>
+            </tr>
+            <tr class="grand-total">
+              <td colspan="7" style="text-align: right; text-transform: uppercase;">Tổng cộng tiền đề xuất giải ngân:</td>
+              <td style="text-align: right; color: #b91c1c; font-size: 13px;">${formatCurrency(totalWithVat)}</td>
+              <td></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="signatures-container">
+          <div class="date-location">Ngày ${day} tháng ${month} năm ${year}</div>
+          <table class="sig-table">
+            <tr>
+              <td>
+                <div class="sig-role">NGƯỜI LẬP PHIẾU</div>
+                <div class="sig-caption">(Ký, ghi rõ họ tên)</div>
+                <div class="sig-space"></div>
+                <div class="sig-name">${requester}</div>
+              </td>
+              <td>
+                <div class="sig-role">PHÒNG QL VẬT TƯ / KHO</div>
+                <div class="sig-caption">(Ký, ghi rõ họ tên)</div>
+                <div class="sig-space"></div>
+                <div class="sig-name">Phòng Cung Ứng Vật Tư</div>
+              </td>
+              <td>
+                <div class="sig-role">CHỈ HUY TRƯỞNG</div>
+                <div class="sig-caption">(Ký, ghi rõ họ tên)</div>
+                <div class="sig-space"></div>
+                <div class="sig-name">Chỉ Huy Trưởng Công Trường</div>
+              </td>
+              <td>
+                <div class="sig-role">BAN GIÁM ĐỐC PHÊ DUYỆT</div>
+                <div class="sig-caption">(Ký duyệt & đóng dấu)</div>
+                <div class="sig-space"></div>
+                <div class="sig-name">${approver}</div>
+              </td>
+            </tr>
+          </table>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const printFrame = document.createElement('iframe');
+    printFrame.style.position = 'fixed';
+    printFrame.style.right = '0';
+    printFrame.style.bottom = '0';
+    printFrame.style.width = '0';
+    printFrame.style.height = '0';
+    printFrame.style.border = '0';
+    document.body.appendChild(printFrame);
+
+    const frameDoc = printFrame.contentWindow?.document;
+    if (!frameDoc) return;
+
+    frameDoc.open();
+    frameDoc.write(printHtml);
+    frameDoc.close();
+
+    printFrame.contentWindow?.focus();
+    setTimeout(() => {
+      printFrame.contentWindow?.print();
+      setTimeout(() => {
+        if (document.body.contains(printFrame)) {
+          document.body.removeChild(printFrame);
+        }
+      }, 1000);
+    }, 300);
   };
 
   return (
@@ -204,33 +522,6 @@ export const PRDetailModal: React.FC<PRDetailModalProps> = ({
         padding: '20px',
       }}
     >
-      <style>{`
-        @media print {
-          body * {
-            visibility: hidden;
-          }
-          .pr-detail-modal-card, .pr-detail-modal-card * {
-            visibility: visible;
-          }
-          .pr-detail-modal-card {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: 100% !important;
-            max-width: 100% !important;
-            box-shadow: none !important;
-            border: none !important;
-          }
-          .pr-modal-overlay {
-            position: static !important;
-            background: none !important;
-            padding: 0 !important;
-          }
-          .no-print {
-            display: none !important;
-          }
-        }
-      `}</style>
       <div
         className="card pr-detail-modal-card"
         style={{
@@ -666,44 +957,6 @@ export const PRDetailModal: React.FC<PRDetailModalProps> = ({
                   </tr>
                 </tbody>
               </table>
-            </div>
-
-            {/* Print Signatures Block (Visible only when printing) */}
-            <div
-              className="print-only"
-              style={{
-                display: 'none',
-                marginTop: '36px',
-                paddingTop: '20px',
-              }}
-            >
-              <style>{`
-                @media print {
-                  .print-only {
-                    display: block !important;
-                  }
-                }
-              `}</style>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', textAlign: 'center', fontSize: '13px' }}>
-                <div>
-                  <div style={{ fontWeight: 800, textTransform: 'uppercase' }}>NGƯỜI ĐỀ XUẤT</div>
-                  <div style={{ fontStyle: 'italic', fontSize: '11px', color: '#64748b' }}>(Ký và ghi rõ họ tên)</div>
-                  <div style={{ height: '70px' }}></div>
-                  <div style={{ fontWeight: 700 }}>{request.requestedByName || request.createdByName || 'Ban chỉ huy'}</div>
-                </div>
-                <div>
-                  <div style={{ fontWeight: 800, textTransform: 'uppercase' }}>CHỈ HUY TRƯỞNG CÔNG TRÌNH</div>
-                  <div style={{ fontStyle: 'italic', fontSize: '11px', color: '#64748b' }}>(Ký và ghi rõ họ tên)</div>
-                  <div style={{ height: '70px' }}></div>
-                  <div style={{ fontWeight: 700 }}>Chỉ huy trưởng</div>
-                </div>
-                <div>
-                  <div style={{ fontWeight: 800, textTransform: 'uppercase' }}>BAN GIÁM ĐỐC PHÊ DUYỆT</div>
-                  <div style={{ fontStyle: 'italic', fontSize: '11px', color: '#64748b' }}>(Ký duyệt & đóng dấu)</div>
-                  <div style={{ height: '70px' }}></div>
-                  <div style={{ fontWeight: 700 }}>{request.approvedByName || 'Ban Giám Đốc BMC'}</div>
-                </div>
-              </div>
             </div>
           </div>
 
