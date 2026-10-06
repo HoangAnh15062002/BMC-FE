@@ -16,6 +16,8 @@ import {
   TrendingDown,
   ShieldCheck,
   Check,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 
 interface VariationDetailModalProps {
@@ -38,6 +40,7 @@ export const VariationDetailModal: React.FC<VariationDetailModalProps> = ({
   const [rejectReason, setRejectReason] = useState<string>('');
   const [showRejectBox, setShowRejectBox] = useState(false);
   const [showApproveBox, setShowApproveBox] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   if (!isOpen || !variation) return null;
 
@@ -420,16 +423,18 @@ export const VariationDetailModal: React.FC<VariationDetailModalProps> = ({
       <div
         className="card"
         style={{
-          width: '95vw',
-          maxWidth: '1100px',
-          maxHeight: '92vh',
+          width: isFullscreen ? '100vw' : '96vw',
+          maxWidth: isFullscreen ? '100vw' : '1600px',
+          height: isFullscreen ? '100vh' : '95vh',
+          maxHeight: isFullscreen ? '100vh' : '95vh',
           display: 'flex',
           flexDirection: 'column',
           backgroundColor: '#ffffff',
-          borderRadius: '16px',
+          borderRadius: isFullscreen ? 0 : '16px',
           boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
           overflow: 'hidden',
           animation: 'fadeIn 0.2s ease-out',
+          transition: 'all 0.15s ease',
         }}
       >
         {/* Modal Header */}
@@ -492,6 +497,25 @@ export const VariationDetailModal: React.FC<VariationDetailModalProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <button
               className="btn btn-secondary btn-sm"
+              onClick={() => setIsFullscreen(!isFullscreen)}
+              title={isFullscreen ? 'Thu nhỏ giao diện' : 'Toàn màn hình'}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: '13px',
+                padding: '6px 12px',
+                borderRadius: '8px',
+                fontWeight: 600,
+                backgroundColor: isFullscreen ? 'rgba(239, 68, 68, 0.1)' : undefined,
+                color: isFullscreen ? 'var(--orange-primary)' : undefined,
+              }}
+            >
+              {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+              <span>{isFullscreen ? 'Thu nhỏ' : 'Toàn màn hình'}</span>
+            </button>
+            <button
+              className="btn btn-secondary btn-sm"
               onClick={handlePrint}
               style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}
             >
@@ -500,7 +524,7 @@ export const VariationDetailModal: React.FC<VariationDetailModalProps> = ({
             <button
               className="btn-icon"
               onClick={onClose}
-              style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748b' }}
+              style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             >
               <X size={22} />
             </button>

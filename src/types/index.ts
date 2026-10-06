@@ -314,6 +314,7 @@ export interface TaskProgressEntry {
   note?: string;
   createdByName?: string;
   photoUrls?: string[];
+  createdAt?: string;
 }
 
 export interface ActualSiteCost {
@@ -432,6 +433,9 @@ export interface Contract {
   fileUrl?: string;
   wordFileUrl?: string;
   description?: string;
+  contractType?: 'OWNER' | 'SUBCONTRACTOR' | 'SUPPLIER' | 'CONSULTING';
+  partnerName?: string;
+  partnerType?: string;
 }
 
 export interface ProjectMember {

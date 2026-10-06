@@ -25,14 +25,19 @@ import {
   FileCheck,
   Download,
   FileEdit,
+  UserCog,
+  UserPlus,
+  Lock,
+  Unlock,
 } from 'lucide-react';
 import { InvestorDetailModal } from '../components/admin/InvestorDetailModal';
 import { ContractDetailModal } from '../components/admin/ContractDetailModal';
 import { PdfViewerModal } from '../components/common/PdfViewerModal';
 import { exportContractToWord } from '../utils/wordExport';
+import { parseContractMeta, ContractCategory } from '../utils/contractHelper';
 
 export const AdminPage: React.FC = () => {
-  const [tab, setTab] = useState<'investors' | 'contracts' | 'members' | 'partners'>('investors');
+  const [tab, setTab] = useState<'investors' | 'contracts' | 'members' | 'partners' | 'users'>('investors');
   const [investors, setInvestors] = useState<Investor[]>([]);
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -40,9 +45,22 @@ export const AdminPage: React.FC = () => {
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Modal: Create User / Employee
+  const [showUserModal, setShowUserModal] = useState(false);
+  const [submittingUser, setSubmittingUser] = useState(false);
+  const [userForm, setUserForm] = useState({
+    username: '',
+    password: '',
+    fullName: '',
+    email: '',
+    phone: '',
+    defaultRoleId: '6',
+  });
+
   // Search & Filter
   const [searchTerm, setSearchTerm] = useState('');
   const [contractProjectFilter, setContractProjectFilter] = useState<string>('ALL');
+  const [contractTypeFilter, setContractTypeFilter] = useState<'ALL' | ContractCategory>('ALL');
 
   // Selected project for Ban Chỉ Huy tab
   const [bchProjectId, setBchProjectId] = useState<number | null>(null);
@@ -76,6 +94,8 @@ export const AdminPage: React.FC = () => {
   const [uploadingCtrWord, setUploadingCtrWord] = useState(false);
   const [ctrForm, setCtrForm] = useState({
     projectId: '',
+    contractType: 'OWNER' as ContractCategory,
+    partnerName: '',
     contractNo: '',
     contractName: '',
     signedDate: new Date().toISOString().slice(0, 10),
@@ -195,9 +215,12 @@ export const AdminPage: React.FC = () => {
     }
     setSubmitting(true);
     try {
-      const descObj = ctrForm.wordUrl
-        ? JSON.stringify({ wordUrl: ctrForm.wordUrl, fileName: ctrForm.wordFileName })
-        : undefined;
+      const descObj = JSON.stringify({
+        contractType: ctrForm.contractType,
+        partnerName: ctrForm.partnerName.trim() || undefined,
+        wordUrl: ctrForm.wordUrl || undefined,
+        fileName: ctrForm.wordFileName || undefined,
+      });
 
       await adminApi.createContract({
         projectId: Number(ctrForm.projectId),
@@ -212,6 +235,8 @@ export const AdminPage: React.FC = () => {
       setShowCtrModal(false);
       setCtrForm({
         projectId: projects.length > 0 ? String(projects[0].id) : '',
+        contractType: 'OWNER',
+        partnerName: '',
         contractNo: '',
         contractName: '',
         signedDate: new Date().toISOString().slice(0, 10),
@@ -277,6 +302,52 @@ export const AdminPage: React.FC = () => {
     }
   };
 
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userForm.username.trim() || !userForm.password.trim() || !userForm.fullName.trim()) {
+      alert('Vui lòng điền đầy đủ Tên đăng nhập, Mật khẩu và Họ tên!');
+      return;
+    }
+    setSubmittingUser(true);
+    try {
+      await adminApi.createUser({
+        username: userForm.username.trim(),
+        password: userForm.password.trim(),
+        fullName: userForm.fullName.trim(),
+        email: userForm.email.trim() || undefined,
+        phone: userForm.phone.trim() || undefined,
+        defaultRoleId: Number(userForm.defaultRoleId) || 6,
+        isActive: true,
+      });
+      setShowUserModal(false);
+      setUserForm({
+        username: '',
+        password: '',
+        fullName: '',
+        email: '',
+        phone: '',
+        defaultRoleId: '6',
+      });
+      alert('Đã tạo tài khoản cán bộ nhân sự BMC thành công!');
+      const usrs = await adminApi.getUsers();
+      setUsers(usrs);
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Lỗi khi tạo tài khoản nhân viên');
+    } finally {
+      setSubmittingUser(false);
+    }
+  };
+
+  const handleToggleUser = async (userId: number) => {
+    try {
+      await adminApi.toggleUserStatus(userId);
+      const usrs = await adminApi.getUsers();
+      setUsers(usrs);
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Lỗi khi cập nhật trạng thái tài khoản');
+    }
+  };
+
   // Calculations for overview KPI
   const totalContractValue = contracts.reduce(
     (sum, c) => sum + (c.totalAdjustedValue || c.contractValue || 0),
@@ -294,16 +365,46 @@ export const AdminPage: React.FC = () => {
     );
   });
 
-  const filteredContracts = contracts.filter((c) => {
+  const projectScopeContracts = contracts.filter((c) =>
+    contractProjectFilter === 'ALL' ? true : String(c.projectId) === contractProjectFilter
+  );
+
+  const filteredContracts = projectScopeContracts.filter((c) => {
     const q = searchTerm.toLowerCase();
+    const meta = parseContractMeta(c);
     const matchSearch =
       c.contractNo.toLowerCase().includes(q) ||
       c.contractName.toLowerCase().includes(q) ||
-      (c.projectName && c.projectName.toLowerCase().includes(q));
-    const matchProject =
-      contractProjectFilter === 'ALL' || String(c.projectId) === contractProjectFilter;
-    return matchSearch && matchProject;
+      (c.projectName && c.projectName.toLowerCase().includes(q)) ||
+      (meta.partnerName && meta.partnerName.toLowerCase().includes(q));
+    const matchType =
+      contractTypeFilter === 'ALL' || meta.contractType === contractTypeFilter;
+    return matchSearch && matchType;
   });
+
+  const ownerScopeContracts = projectScopeContracts.filter(
+    (c) => parseContractMeta(c).isRevenue
+  );
+  const costScopeContracts = projectScopeContracts.filter(
+    (c) => !parseContractMeta(c).isRevenue
+  );
+
+  const totalRevenue = ownerScopeContracts.reduce(
+    (sum, c) => sum + (c.totalAdjustedValue || c.contractValue || 0),
+    0
+  );
+  const totalCost = costScopeContracts.reduce(
+    (sum, c) => sum + (c.totalAdjustedValue || c.contractValue || 0),
+    0
+  );
+  const grossProfit = totalRevenue - totalCost;
+  const profitMargin = totalRevenue > 0 ? (grossProfit / totalRevenue) * 100 : 0;
+
+  const countAll = projectScopeContracts.length;
+  const countOwner = projectScopeContracts.filter((c) => parseContractMeta(c).contractType === 'OWNER').length;
+  const countSub = projectScopeContracts.filter((c) => parseContractMeta(c).contractType === 'SUBCONTRACTOR').length;
+  const countSupplier = projectScopeContracts.filter((c) => parseContractMeta(c).contractType === 'SUPPLIER').length;
+  const countConsulting = projectScopeContracts.filter((c) => parseContractMeta(c).contractType === 'CONSULTING').length;
 
   const filteredSuppliers = suppliers.filter((s) => {
     const q = searchTerm.toLowerCase();
@@ -512,6 +613,15 @@ export const AdminPage: React.FC = () => {
         >
           <Handshake size={16} /> Đối Tác & Nhà Thầu Phụ ({suppliers.length})
         </button>
+        <button
+          className={`tab-btn ${tab === 'users' ? 'active' : ''}`}
+          onClick={() => {
+            setTab('users');
+            setSearchTerm('');
+          }}
+        >
+          <UserCog size={16} /> Tài Khoản & Nhân Sự ({users.length})
+        </button>
       </div>
 
       {/* ===== TAB 1: CHỦ ĐẦU TƯ ===== */}
@@ -685,6 +795,194 @@ export const AdminPage: React.FC = () => {
             </div>
           </div>
 
+          {/* ===== MULTI-CONTRACT FINANCIAL SUMMARY DASHBOARD ===== */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              gap: '12px',
+              marginBottom: '16px',
+            }}
+          >
+            {/* Card 1: HĐ Chủ Đầu Tư (Doanh Thu) */}
+            <div
+              style={{
+                backgroundColor: 'rgba(37, 99, 235, 0.05)',
+                border: '1px solid rgba(37, 99, 235, 0.2)',
+                borderRadius: '10px',
+                padding: '14px 16px',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#1d4ed8', textTransform: 'uppercase' }}>
+                  🏢 HĐ Chủ Đầu Tư (Doanh Thu)
+                </span>
+                <span className="badge badge-neutral" style={{ fontSize: '0.72rem', fontWeight: 700 }}>
+                  {countOwner} HĐ
+                </span>
+              </div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#1d4ed8', marginTop: '6px' }}>
+                {formatCurrency(totalRevenue)}
+              </div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                Doanh thu ký kết từ Chủ Đầu Tư
+              </div>
+            </div>
+
+            {/* Card 2: HĐ Thầu Phụ & Cung Ứng (Chi Phí Giao Khoán) */}
+            <div
+              style={{
+                backgroundColor: 'rgba(234, 88, 12, 0.05)',
+                border: '1px solid rgba(234, 88, 12, 0.2)',
+                borderRadius: '10px',
+                padding: '14px 16px',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ea580c', textTransform: 'uppercase' }}>
+                  🔨🚚 HĐ Thầu Phụ & Cung Ứng (Chi Phí)
+                </span>
+                <span className="badge badge-neutral" style={{ fontSize: '0.72rem', fontWeight: 700 }}>
+                  {countSub + countSupplier + countConsulting} HĐ
+                </span>
+              </div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#ea580c', marginTop: '6px' }}>
+                {formatCurrency(totalCost)}
+              </div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                {countSub} HĐ Thầu phụ • {countSupplier} HĐ Cung ứng VLXD
+              </div>
+            </div>
+
+            {/* Card 3: Biên Lợi Nhuận Giao Khoán Dự Kiến */}
+            <div
+              style={{
+                backgroundColor: grossProfit >= 0 ? 'rgba(16, 185, 129, 0.05)' : 'rgba(239, 68, 68, 0.05)',
+                border: `1px solid ${grossProfit >= 0 ? 'rgba(16, 185, 129, 0.25)' : 'rgba(239, 68, 68, 0.25)'}`,
+                borderRadius: '10px',
+                padding: '14px 16px',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span
+                  style={{
+                    fontSize: '0.8rem',
+                    fontWeight: 700,
+                    color: grossProfit >= 0 ? '#059669' : '#dc2626',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  💰 Chênh Lệch Biên Lợi Nhuận
+                </span>
+                <span
+                  style={{
+                    fontSize: '0.72rem',
+                    fontWeight: 700,
+                    color: grossProfit >= 0 ? '#059669' : '#dc2626',
+                    backgroundColor: grossProfit >= 0 ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                  }}
+                >
+                  {profitMargin.toFixed(1)}%
+                </span>
+              </div>
+              <div
+                style={{
+                  fontSize: '1.25rem',
+                  fontWeight: 800,
+                  color: grossProfit >= 0 ? '#059669' : '#dc2626',
+                  marginTop: '6px',
+                }}
+              >
+                {grossProfit >= 0 ? `+${formatCurrency(grossProfit)}` : formatCurrency(grossProfit)}
+              </div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                {contractProjectFilter === 'ALL' ? 'Toàn bộ danh mục dự án' : 'Dự án đang chọn'}
+              </div>
+            </div>
+
+            {/* Card 4: Tổng Số Hợp Đồng */}
+            <div
+              style={{
+                backgroundColor: 'rgba(147, 51, 234, 0.05)',
+                border: '1px solid rgba(147, 51, 234, 0.2)',
+                borderRadius: '10px',
+                padding: '14px 16px',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#7e22ce', textTransform: 'uppercase' }}>
+                  📑 Tổng Hợp Đồng Dự Án
+                </span>
+                <span className="badge badge-neutral" style={{ fontSize: '0.72rem', fontWeight: 700 }}>
+                  Active
+                </span>
+              </div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#7e22ce', marginTop: '6px' }}>
+                {countAll} Hợp Đồng
+              </div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                1 công trình có thể gồm nhiều gói thầu
+              </div>
+            </div>
+          </div>
+
+          {/* ===== CONTRACT CATEGORY FILTER PILLS ===== */}
+          <div
+            style={{
+              display: 'flex',
+              gap: '8px',
+              marginBottom: '16px',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+            }}
+          >
+            <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-muted)', marginRight: '4px' }}>
+              Lọc theo loại:
+            </span>
+            <button
+              type="button"
+              className={`btn btn-sm ${contractTypeFilter === 'ALL' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setContractTypeFilter('ALL')}
+              style={{ borderRadius: '20px', fontSize: '0.8rem', padding: '4px 12px' }}
+            >
+              Tất Cả ({countAll})
+            </button>
+            <button
+              type="button"
+              className={`btn btn-sm ${contractTypeFilter === 'OWNER' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setContractTypeFilter('OWNER')}
+              style={{ borderRadius: '20px', fontSize: '0.8rem', padding: '4px 12px' }}
+            >
+              🏢 HĐ Chủ Đầu Tư ({countOwner})
+            </button>
+            <button
+              type="button"
+              className={`btn btn-sm ${contractTypeFilter === 'SUBCONTRACTOR' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setContractTypeFilter('SUBCONTRACTOR')}
+              style={{ borderRadius: '20px', fontSize: '0.8rem', padding: '4px 12px' }}
+            >
+              🔨 HĐ Thầu Phụ ({countSub})
+            </button>
+            <button
+              type="button"
+              className={`btn btn-sm ${contractTypeFilter === 'SUPPLIER' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setContractTypeFilter('SUPPLIER')}
+              style={{ borderRadius: '20px', fontSize: '0.8rem', padding: '4px 12px' }}
+            >
+              🚚 HĐ Cung Ứng VLXD ({countSupplier})
+            </button>
+            <button
+              type="button"
+              className={`btn btn-sm ${contractTypeFilter === 'CONSULTING' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setContractTypeFilter('CONSULTING')}
+              style={{ borderRadius: '20px', fontSize: '0.8rem', padding: '4px 12px' }}
+            >
+              📐 HĐ Tư Vấn & Dịch Vụ ({countConsulting})
+            </button>
+          </div>
+
           {/* Quick Guide Alert */}
           <div
             style={{
@@ -702,7 +1000,7 @@ export const AdminPage: React.FC = () => {
           >
             <FileText size={18} style={{ flexShrink: 0 }} />
             <span>
-              💡 <strong>Xem Hợp Đồng:</strong> Bạn có thể <strong>click trực tiếp vào bất kỳ dòng nào</strong> hoặc bấm nút <strong>"Xem Hợp Đồng"</strong> để đọc toàn văn hợp đồng xây dựng, điều khoản pháp lý, quản lý phụ lục phát sinh và in bản A4.
+              💡 <strong>Quản Lý Đa Hợp Đồng:</strong> 1 công trình gồm <strong>HĐ Chủ Đầu Tư</strong> (doanh thu) và các <strong>HĐ Thầu Phụ, Cung Ứng VLXD</strong> (chi phí). Click vào bất kỳ dòng nào để xem trọn vẹn văn bản hợp đồng, tải Word hoặc xem bản scan PDF dấu đỏ.
             </span>
           </div>
 
@@ -710,180 +1008,246 @@ export const AdminPage: React.FC = () => {
             <table className="bmc-table">
               <thead>
                 <tr>
-                  <th style={{ minWidth: '180px' }}>Số Hợp Đồng</th>
-                  <th style={{ minWidth: '220px' }}>Công Trình / Dự Án</th>
-                  <th>Tên Gói Thầu / Hợp Đồng</th>
-                  <th style={{ minWidth: '100px' }}>Ngày Ký</th>
-                  <th style={{ minWidth: '130px' }}>Giá Trị Ban Đầu</th>
-                  <th style={{ minWidth: '140px' }}>Tổng Sau Điều Chỉnh</th>
-                  <th style={{ minWidth: '90px' }}>Số Phụ Lục</th>
+                  <th style={{ minWidth: '170px' }}>Số Hợp Đồng</th>
+                  <th style={{ minWidth: '190px' }}>Phân Loại & Đối Tác</th>
+                  <th style={{ minWidth: '200px' }}>Công Trình / Dự Án</th>
+                  <th>Tên Gói Thầu / Hạng Mục</th>
+                  <th style={{ minWidth: '95px' }}>Ngày Ký</th>
+                  <th style={{ minWidth: '140px' }}>Giá Trị Ký Ban Đầu</th>
+                  <th style={{ minWidth: '150px' }}>Sau Điều Chỉnh</th>
+                  <th style={{ minWidth: '85px' }}>Số Phụ Lục</th>
                   <th style={{ minWidth: '90px' }}>Trạng Thái</th>
                   <th style={{ minWidth: '150px', textAlign: 'center' }}>Thao Tác</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredContracts.map((c) => (
-                  <tr
-                    key={c.id}
-                    onClick={() => setSelectedContractId(c.id)}
-                    style={{ cursor: 'pointer', transition: 'background-color 0.15s' }}
-                    title="Nhấp vào để xem chi tiết hợp đồng & phụ lục"
-                  >
-                    <td>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedContractId(c.id);
-                        }}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          padding: 0,
-                          cursor: 'pointer',
-                          fontWeight: 700,
-                          color: 'var(--blue-tech)',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          textDecoration: 'underline',
-                          fontSize: '0.9rem',
-                        }}
-                        title="Bấm để xem hợp đồng"
-                      >
-                        <Eye size={15} /> {c.contractNo}
-                      </button>
-                    </td>
-                    <td>
-                      <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>
-                        {c.projectName || `Dự án #${c.projectId}`}
-                      </div>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                        {c.projectCode || `ID: ${c.projectId}`}
-                      </span>
-                    </td>
-                    <td>
-                      <div style={{ fontWeight: 600 }}>{c.contractName}</div>
-                      {c.fileUrl && (
-                        <span
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            fontSize: '0.72rem',
-                            color: '#ef4444',
-                            fontWeight: 700,
-                            backgroundColor: 'rgba(239, 68, 68, 0.08)',
-                            padding: '1px 6px',
-                            borderRadius: '4px',
-                            marginTop: '2px',
-                          }}
-                        >
-                          <FileText size={10} /> Đã có tệp scan PDF
-                        </span>
-                      )}
-                    </td>
-                    <td>{formatDate(c.signedDate)}</td>
-                    <td>{formatCurrency(c.contractValue)}</td>
-                    <td style={{ fontWeight: 700, color: 'var(--orange-primary)' }}>
-                      {formatCurrency(c.totalAdjustedValue || c.contractValue)}
-                    </td>
-                    <td>
-                      <span className="badge badge-neutral" style={{ fontWeight: 600 }}>
-                        {c.appendicesCount || 0} phụ lục
-                      </span>
-                    </td>
-                    <td>
-                      <span className="badge badge-active">{c.status || 'ACTIVE'}</span>
-                    </td>
-                    <td style={{ textAlign: 'center' }}>
-                      <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', flexWrap: 'nowrap' }}>
-                        {/* Download Word draft */}
+                {filteredContracts.map((c) => {
+                  const meta = parseContractMeta(c);
+                  return (
+                    <tr
+                      key={c.id}
+                      onClick={() => setSelectedContractId(c.id)}
+                      style={{ cursor: 'pointer', transition: 'background-color 0.15s' }}
+                      title="Nhấp vào để xem chi tiết hợp đồng & phụ lục"
+                    >
+                      <td>
                         <button
                           type="button"
-                          className="btn btn-secondary btn-sm"
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (c.description) {
-                              try {
-                                const parsed = JSON.parse(c.description);
-                                if (parsed.wordUrl) {
-                                  const link = document.createElement('a');
-                                  link.href = parsed.wordUrl;
-                                  link.download = parsed.fileName || `${c.contractNo}.docx`;
-                                  document.body.appendChild(link);
-                                  link.click();
-                                  document.body.removeChild(link);
-                                  return;
-                                }
-                              } catch {}
-                            }
-                            exportContractToWord(c);
+                            setSelectedContractId(c.id);
                           }}
-                          title="Tải về file Word (.doc/.docx) hợp đồng gốc để chỉnh sửa"
                           style={{
+                            background: 'none',
+                            border: 'none',
+                            padding: 0,
+                            cursor: 'pointer',
+                            fontWeight: 700,
+                            color: 'var(--blue-tech)',
                             display: 'inline-flex',
                             alignItems: 'center',
-                            gap: '4px',
-                            color: '#2563eb',
-                            borderColor: 'rgba(37, 99, 235, 0.35)',
-                            backgroundColor: 'rgba(37, 99, 235, 0.06)',
-                            whiteSpace: 'nowrap',
-                            fontWeight: 600,
+                            gap: '6px',
+                            textDecoration: 'underline',
+                            fontSize: '0.9rem',
+                          }}
+                          title="Bấm để xem hợp đồng"
+                        >
+                          <Eye size={15} /> {c.contractNo}
+                        </button>
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              fontWeight: 700,
+                              fontSize: '0.74rem',
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              width: 'fit-content',
+                              backgroundColor:
+                                meta.contractType === 'OWNER'
+                                  ? 'rgba(37, 99, 235, 0.1)'
+                                  : meta.contractType === 'SUBCONTRACTOR'
+                                  ? 'rgba(147, 51, 234, 0.1)'
+                                  : meta.contractType === 'SUPPLIER'
+                                  ? 'rgba(16, 185, 129, 0.1)'
+                                  : 'rgba(100, 116, 139, 0.1)',
+                              color:
+                                meta.contractType === 'OWNER'
+                                  ? '#1d4ed8'
+                                  : meta.contractType === 'SUBCONTRACTOR'
+                                  ? '#7e22ce'
+                                  : meta.contractType === 'SUPPLIER'
+                                  ? '#047857'
+                                  : '#334155',
+                            }}
+                          >
+                            {meta.contractType === 'OWNER' ? '🏢 ' : meta.contractType === 'SUBCONTRACTOR' ? '🔨 ' : meta.contractType === 'SUPPLIER' ? '🚚 ' : '📐 '}
+                            {meta.badgeText}
+                          </span>
+                          <div
+                            style={{
+                              fontSize: '0.8rem',
+                              fontWeight: 600,
+                              color: 'var(--text-main)',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              maxWidth: '180px',
+                            }}
+                            title={meta.partnerName}
+                          >
+                            {meta.partnerName}
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>
+                          {c.projectName || `Dự án #${c.projectId}`}
+                        </div>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                          {c.projectCode || `ID: ${c.projectId}`}
+                        </span>
+                      </td>
+                      <td>
+                        <div style={{ fontWeight: 600 }}>{c.contractName}</div>
+                        {c.fileUrl && (
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              fontSize: '0.72rem',
+                              color: '#ef4444',
+                              fontWeight: 700,
+                              backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                              padding: '1px 6px',
+                              borderRadius: '4px',
+                              marginTop: '2px',
+                            }}
+                          >
+                            <FileText size={10} /> Đã có tệp scan PDF
+                          </span>
+                        )}
+                      </td>
+                      <td>{formatDate(c.signedDate)}</td>
+                      <td>
+                        <div style={{ fontWeight: 600 }}>{formatCurrency(c.contractValue)}</div>
+                        <span
+                          style={{
+                            fontSize: '0.72rem',
+                            fontWeight: 700,
+                            color: meta.isRevenue ? '#16a34a' : '#ea580c',
                           }}
                         >
-                          <Download size={13} /> Tải Word
-                        </button>
-
-                        {/* View Scan PDF */}
-                        {c.fileUrl && (
+                          {meta.isRevenue ? '(+ Doanh thu)' : '(- Chi phí)'}
+                        </span>
+                      </td>
+                      <td>
+                        <div style={{ fontWeight: 700, color: meta.isRevenue ? 'var(--blue-tech)' : '#ea580c' }}>
+                          {formatCurrency(c.totalAdjustedValue || c.contractValue)}
+                        </div>
+                      </td>
+                      <td>
+                        <span className="badge badge-neutral" style={{ fontWeight: 600 }}>
+                          {c.appendicesCount || 0} phụ lục
+                        </span>
+                      </td>
+                      <td>
+                        <span className="badge badge-active">{c.status || 'ACTIVE'}</span>
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', flexWrap: 'nowrap' }}>
+                          {/* Download Word draft */}
                           <button
                             type="button"
                             className="btn btn-secondary btn-sm"
                             onClick={(e) => {
                               e.stopPropagation();
-                              setPdfModal({
-                                isOpen: true,
-                                title: `Bản Scan Hợp Đồng: ${c.contractNo} (Có Dấu Đỏ)`,
-                                url: c.fileUrl!,
-                              });
+                              if (c.description) {
+                                try {
+                                  const parsed = JSON.parse(c.description);
+                                  if (parsed.wordUrl) {
+                                    const link = document.createElement('a');
+                                    link.href = parsed.wordUrl;
+                                    link.download = parsed.fileName || `${c.contractNo}.docx`;
+                                    document.body.appendChild(link);
+                                    link.click();
+                                    document.body.removeChild(link);
+                                    return;
+                                  }
+                                } catch {}
+                              }
+                              exportContractToWord(c);
                             }}
-                            title="Xem ngay bản scan PDF có dấu đỏ"
+                            title="Tải về file Word (.doc/.docx) hợp đồng gốc để chỉnh sửa"
                             style={{
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: '4px',
-                              color: '#ef4444',
-                              borderColor: 'rgba(239, 68, 68, 0.35)',
-                              backgroundColor: 'rgba(239, 68, 68, 0.06)',
+                              color: '#2563eb',
+                              borderColor: 'rgba(37, 99, 235, 0.35)',
+                              backgroundColor: 'rgba(37, 99, 235, 0.06)',
                               whiteSpace: 'nowrap',
                               fontWeight: 600,
                             }}
                           >
-                            <FileText size={13} /> Scan PDF
+                            <Download size={13} /> Tải Word
                           </button>
-                        )}
 
-                        <button
-                          type="button"
-                          className="btn btn-primary btn-sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedContractId(c.id);
-                          }}
-                          title="Xem toàn văn hợp đồng & phụ lục"
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}
-                        >
-                          <Eye size={13} /> Chi Tiết
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                          {/* View Scan PDF */}
+                          {c.fileUrl && (
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPdfModal({
+                                  isOpen: true,
+                                  title: `Bản Scan Hợp Đồng: ${c.contractNo} (Có Dấu Đỏ)`,
+                                  url: c.fileUrl!,
+                                });
+                              }}
+                              title="Xem ngay bản scan PDF có dấu đỏ"
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                color: '#ef4444',
+                                borderColor: 'rgba(239, 68, 68, 0.35)',
+                                backgroundColor: 'rgba(239, 68, 68, 0.06)',
+                                whiteSpace: 'nowrap',
+                                fontWeight: 600,
+                              }}
+                            >
+                              <FileText size={13} /> Scan PDF
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            className="btn btn-primary btn-sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedContractId(c.id);
+                            }}
+                            title="Xem toàn văn hợp đồng & phụ lục"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}
+                          >
+                            <Eye size={13} /> Chi Tiết
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
                 {filteredContracts.length === 0 && !loading && (
                   <tr>
-                    <td colSpan={9} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>
-                      Chưa có hợp đồng nào phù hợp. Bấm <strong>"Thêm Hợp Đồng Mới"</strong> để khởi tạo.
+                    <td colSpan={10} style={{ textAlign: 'center', padding: '36px', color: 'var(--text-muted)' }}>
+                      Không tìm thấy hợp đồng nào phù hợp với điều kiện lọc hiện tại. Bấm <strong>"+ Thêm Hợp Đồng Mới"</strong> để khởi tạo.
                     </td>
                   </tr>
                 )}
@@ -1106,10 +1470,249 @@ export const AdminPage: React.FC = () => {
         </div>
       )}
 
+      {/* ===== TAB 5: TÀI KHOẢN & NHÂN SỰ ===== */}
+      {tab === 'users' && (() => {
+        const filteredUsers = users.filter((u) => {
+          const q = searchTerm.toLowerCase();
+          return (
+            (u.fullName && u.fullName.toLowerCase().includes(q)) ||
+            (u.username && u.username.toLowerCase().includes(q)) ||
+            (u.roleName && u.roleName.toLowerCase().includes(q)) ||
+            (u.email && u.email.toLowerCase().includes(q)) ||
+            (u.phone && u.phone.toLowerCase().includes(q))
+          );
+        });
+
+        return (
+          <div className="card">
+            <div className="card-header" style={{ marginBottom: '16px', flexWrap: 'wrap', gap: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.15rem' }}>Quản Lý Tài Khoản & Cán Bộ Nhân Sự BMC</h3>
+                <p style={{ margin: '2px 0 0 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  Danh sách tài khoản hệ thống dùng để phân công Ban Chỉ Huy công trường, Giám sát, Kế toán và Quản lý kho
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                <div style={{ position: 'relative' }}>
+                  <Search size={15} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                  <input
+                    type="text"
+                    className="form-input form-input-sm"
+                    placeholder="Tìm tên, tài khoản, chức vụ..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    style={{ paddingLeft: '32px', width: '240px' }}
+                  />
+                </div>
+                <button className="btn btn-primary btn-sm" onClick={() => setShowUserModal(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                  <UserPlus size={16} /> Thêm Tài Khoản Mới
+                </button>
+              </div>
+            </div>
+
+            <div className="table-container">
+              <table className="bmc-table">
+                <thead>
+                  <tr>
+                    <th>Họ & Tên Nhân Sự</th>
+                    <th>Tên Tài Khoản</th>
+                    <th>Chức Danh / Vai Trò</th>
+                    <th>Email Liên Hệ</th>
+                    <th>Số Điện Thoại</th>
+                    <th>Trạng Thái</th>
+                    <th style={{ textAlign: 'center' }}>Thao Tác</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredUsers.map((u) => (
+                    <tr key={u.id}>
+                      <td style={{ fontWeight: 600 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div
+                            style={{
+                              width: '30px',
+                              height: '30px',
+                              borderRadius: '50%',
+                              backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                              color: 'var(--blue-tech)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontWeight: 700,
+                              fontSize: '0.8rem',
+                            }}
+                          >
+                            {u.fullName?.charAt(0)?.toUpperCase() || 'U'}
+                          </div>
+                          <span>{u.fullName}</span>
+                        </div>
+                      </td>
+                      <td style={{ fontWeight: 600, color: 'var(--blue-tech)' }}>
+                        @{u.username}
+                      </td>
+                      <td>
+                        <span
+                          style={{
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            padding: '3px 8px',
+                            borderRadius: '6px',
+                            backgroundColor: 'rgba(234, 88, 12, 0.08)',
+                            color: 'var(--orange-primary)',
+                            border: '1px solid rgba(234, 88, 12, 0.25)',
+                          }}
+                        >
+                          {u.roleName || 'Cán bộ kỹ thuật'}
+                        </span>
+                      </td>
+                      <td style={{ fontSize: '0.85rem' }}>{u.email || '-'}</td>
+                      <td style={{ fontSize: '0.85rem' }}>{u.phone || '-'}</td>
+                      <td>
+                        <span className={`badge ${u.isActive ? 'badge-active' : 'badge-danger'}`}>
+                          {u.isActive ? 'Đang hoạt động' : 'Đã khóa'}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => handleToggleUser(u.id)}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            fontSize: '0.75rem',
+                            padding: '3px 8px',
+                            color: u.isActive ? '#dc2626' : '#16a34a',
+                          }}
+                          title={u.isActive ? 'Khóa tài khoản này' : 'Mở khóa tài khoản này'}
+                        >
+                          {u.isActive ? <Lock size={12} /> : <Unlock size={12} />}
+                          {u.isActive ? 'Khóa' : 'Kích hoạt'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {filteredUsers.length === 0 && !loading && (
+                    <tr>
+                      <td colSpan={7} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>
+                        Không tìm thấy tài khoản nhân sự nào phù hợp.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ===== MODAL: Create User / Employee ===== */}
+      {showUserModal && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+          <div className="card" style={{ width: '600px', maxWidth: '95vw', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div className="card-header" style={{ marginBottom: '20px' }}>
+              <div>
+                <h3 style={{ margin: 0 }}>Thêm Tài Khoản Cán Bộ / Nhân Sự Mới</h3>
+                <p style={{ margin: '2px 0 0 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  Tạo tài khoản đăng nhập và gán vào hệ thống nhân sự BMC
+                </p>
+              </div>
+              <button className="btn btn-secondary btn-sm" onClick={() => setShowUserModal(false)}><X size={16} /></button>
+            </div>
+            <form onSubmit={handleCreateUser}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div className="form-group">
+                  <label className="form-label">Tên Đăng Nhập (Username) *</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={userForm.username}
+                    onChange={(e) => setUserForm({ ...userForm, username: e.target.value })}
+                    placeholder="VD: nam.kysu"
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Mật Khẩu Khởi Tạo *</label>
+                  <input
+                    type="password"
+                    className="form-input"
+                    value={userForm.password}
+                    onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
+                    placeholder="Tối thiểu 6 ký tự"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Họ và Tên Cán Bộ *</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={userForm.fullName}
+                  onChange={(e) => setUserForm({ ...userForm, fullName: e.target.value })}
+                  placeholder="VD: Nguyễn Văn Nam"
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div className="form-group">
+                  <label className="form-label">Chức Danh / Vai Trò Chính *</label>
+                  <select
+                    className="form-select"
+                    value={userForm.defaultRoleId}
+                    onChange={(e) => setUserForm({ ...userForm, defaultRoleId: e.target.value })}
+                    required
+                  >
+                    <option value="6">👷 Chỉ huy trưởng (Site Manager)</option>
+                    <option value="7">👷 Kỹ sư hiện trường / Giám sát</option>
+                    <option value="5">📊 Kỹ sư dự toán (QS)</option>
+                    <option value="4">💰 Kế toán công trình</option>
+                    <option value="8">📦 Quản lý kho / Vật tư</option>
+                    <option value="1">🛡️ Quản trị hệ thống (Admin)</option>
+                    <option value="2">🏢 Ban Giám Đốc</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Số Điện Thoại</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={userForm.phone}
+                    onChange={(e) => setUserForm({ ...userForm, phone: e.target.value })}
+                    placeholder="VD: 0912345678"
+                  />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Hòm Thư Điện Tử (Email)</label>
+                <input
+                  type="email"
+                  className="form-input"
+                  value={userForm.email}
+                  onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
+                  placeholder="VD: nam.nv@bmc.vn"
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '20px' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setShowUserModal(false)}>Hủy</button>
+                <button type="submit" className="btn btn-primary" disabled={submittingUser}>
+                  {submittingUser ? 'Đang tạo...' : 'Lưu Tài Khoản'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* ===== MODAL: Create Investor ===== */}
       {showInvModal && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div className="card" style={{ width: '580px', maxHeight: '90vh', overflowY: 'auto' }}>
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+          <div className="card" style={{ width: '800px', maxWidth: '95vw', maxHeight: '90vh', overflowY: 'auto' }}>
             <div className="card-header" style={{ marginBottom: '20px' }}>
               <h3 style={{ margin: 0 }}>Thêm Chủ Đầu Tư / Khách Hàng Mới</h3>
               <button className="btn btn-secondary btn-sm" onClick={() => setShowInvModal(false)}><X size={16} /></button>
@@ -1160,8 +1763,8 @@ export const AdminPage: React.FC = () => {
 
       {/* ===== MODAL: Create Contract ===== */}
       {showCtrModal && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div className="card" style={{ width: '620px', maxHeight: '90vh', overflowY: 'auto' }}>
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+          <div className="card" style={{ width: '880px', maxWidth: '95vw', maxHeight: '90vh', overflowY: 'auto' }}>
             <div className="card-header" style={{ marginBottom: '20px' }}>
               <h3 style={{ margin: 0 }}>Thêm Hợp Đồng Thi Công Mới</h3>
               <button className="btn btn-secondary btn-sm" onClick={() => setShowCtrModal(false)}><X size={16} /></button>
@@ -1174,6 +1777,81 @@ export const AdminPage: React.FC = () => {
                   {projects.map((p) => <option key={p.id} value={p.id}>[{p.code}] {p.name}</option>)}
                 </select>
               </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div className="form-group">
+                  <label className="form-label">Loại Hợp Đồng *</label>
+                  <select
+                    className="form-select"
+                    value={ctrForm.contractType}
+                    onChange={(e) => {
+                      const newType = e.target.value as ContractCategory;
+                      let suggestedNo = ctrForm.contractNo;
+                      if (!suggestedNo || suggestedNo.startsWith('HĐ')) {
+                        if (newType === 'OWNER') suggestedNo = 'HĐ-2024/01/BMC-NL';
+                        else if (newType === 'SUBCONTRACTOR') suggestedNo = 'HĐTP-2024/02/BMC-PM';
+                        else if (newType === 'SUPPLIER') suggestedNo = 'HĐCU-2024/03/BMC-AL';
+                        else suggestedNo = 'HĐTV-2024/04/BMC';
+                      }
+                      setCtrForm({
+                        ...ctrForm,
+                        contractType: newType,
+                        contractNo: suggestedNo,
+                      });
+                    }}
+                    required
+                  >
+                    <option value="OWNER">🏢 HĐ Chủ Đầu Tư (Doanh Thu)</option>
+                    <option value="SUBCONTRACTOR">🔨 HĐ Giao Thầu Phụ (Chi Phí)</option>
+                    <option value="SUPPLIER">🚚 HĐ Cung Ứng Vật Tư & TB (Chi Phí)</option>
+                    <option value="CONSULTING">📐 HĐ Tư Vấn & Dịch Vụ</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Đối Tác Ký Kết *</label>
+                  {ctrForm.contractType === 'OWNER' ? (
+                    <div>
+                      <input
+                        type="text"
+                        className="form-input"
+                        list="investor-list"
+                        value={ctrForm.partnerName}
+                        onChange={(e) => setCtrForm({ ...ctrForm, partnerName: e.target.value })}
+                        placeholder="Chọn hoặc nhập tên Chủ Đầu Tư..."
+                        required
+                      />
+                      <datalist id="investor-list">
+                        {investors.map((inv) => (
+                          <option key={inv.id} value={inv.name}>
+                            {inv.code} - {inv.name}
+                          </option>
+                        ))}
+                      </datalist>
+                    </div>
+                  ) : (
+                    <div>
+                      <input
+                        type="text"
+                        className="form-input"
+                        list="supplier-list"
+                        value={ctrForm.partnerName}
+                        onChange={(e) => setCtrForm({ ...ctrForm, partnerName: e.target.value })}
+                        placeholder="Chọn hoặc nhập tên Thầu Phụ / Nhà Cung Cấp..."
+                        required
+                      />
+                      <datalist id="supplier-list">
+                        {suppliers.map((sup) => (
+                          <option key={sup.id} value={sup.name}>
+                            [{sup.code}] {sup.name}
+                          </option>
+                        ))}
+                      </datalist>
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '16px' }}>
                 <div className="form-group">
                   <label className="form-label">Số Hợp Đồng *</label>
@@ -1284,8 +1962,8 @@ export const AdminPage: React.FC = () => {
 
       {/* ===== MODAL: Add BCH Member ===== */}
       {showMemberModal && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div className="card" style={{ width: '520px', maxHeight: '90vh', overflowY: 'auto' }}>
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+          <div className="card" style={{ width: '700px', maxWidth: '95vw', maxHeight: '90vh', overflowY: 'auto' }}>
             <div className="card-header" style={{ marginBottom: '20px' }}>
               <h3 style={{ margin: 0 }}>Bổ Nhiệm Nhân Sự Ban Chỉ Huy</h3>
               <button className="btn btn-secondary btn-sm" onClick={() => setShowMemberModal(false)}><X size={16} /></button>
@@ -1351,8 +2029,8 @@ export const AdminPage: React.FC = () => {
 
       {/* ===== MODAL: Create Supplier / Partner ===== */}
       {showSupplierModal && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div className="card" style={{ width: '580px', maxHeight: '90vh', overflowY: 'auto' }}>
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+          <div className="card" style={{ width: '820px', maxWidth: '95vw', maxHeight: '90vh', overflowY: 'auto' }}>
             <div className="card-header" style={{ marginBottom: '20px' }}>
               <h3 style={{ margin: 0 }}>Thêm Đối Tác / Nhà Cung Cấp / Thầu Phụ Mới</h3>
               <button className="btn btn-secondary btn-sm" onClick={() => setShowSupplierModal(false)}><X size={16} /></button>

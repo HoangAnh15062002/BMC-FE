@@ -4,6 +4,7 @@ import { Project } from '../types';
 import { formatDate, getProjectStatusLabel, getStatusBadgeClass } from '../utils/formatters';
 import { Plus, Search, Eye, X, MapPin, Calendar, Building2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { Pagination } from '../components/common/Pagination';
 
 export const ProjectsPage: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -11,6 +12,10 @@ export const ProjectsPage: React.FC = () => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [showModal, setShowModal] = useState(false);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   // Create project form state
   const [newCode, setNewCode] = useState('');
@@ -36,6 +41,7 @@ export const ProjectsPage: React.FC = () => {
   };
 
   useEffect(() => {
+    setCurrentPage(1);
     const t = setTimeout(loadProjects, 300);
     return () => clearTimeout(t);
   }, [search, statusFilter]);
@@ -76,6 +82,8 @@ export const ProjectsPage: React.FC = () => {
     { value: 'COMPLETED', label: 'Hoàn thành' },
     { value: 'CANCELLED', label: 'Đã hủy' },
   ];
+
+  const paginatedProjects = projects.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   return (
     <div>
@@ -130,7 +138,7 @@ export const ProjectsPage: React.FC = () => {
               <tr><td colSpan={9} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>
                 Không tìm thấy dự án nào.
               </td></tr>
-            ) : projects.map((p) => (
+            ) : paginatedProjects.map((p) => (
               <tr key={p.id}>
                 <td>
                   <span style={{ fontWeight: 700, color: 'var(--orange-primary)' }}>{p.code}</span>
@@ -173,7 +181,48 @@ export const ProjectsPage: React.FC = () => {
                   </div>
                 </td>
                 <td>
-                  <span className={`badge ${getStatusBadgeClass(p.status)}`}>
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      fontSize: '0.8rem',
+                      fontWeight: 700,
+                      whiteSpace: 'nowrap',
+                      backgroundColor:
+                        p.status === 'IN_PROGRESS'
+                          ? 'rgba(16, 185, 129, 0.12)'
+                          : p.status === 'PREPARING'
+                          ? 'rgba(245, 158, 11, 0.12)'
+                          : p.status === 'PAUSED'
+                          ? 'rgba(234, 88, 12, 0.12)'
+                          : p.status === 'COMPLETED'
+                          ? 'rgba(37, 99, 235, 0.12)'
+                          : 'rgba(239, 68, 68, 0.12)',
+                      color:
+                        p.status === 'IN_PROGRESS'
+                          ? '#059669'
+                          : p.status === 'PREPARING'
+                          ? '#d97706'
+                          : p.status === 'PAUSED'
+                          ? '#ea580c'
+                          : p.status === 'COMPLETED'
+                          ? '#2563eb'
+                          : '#dc2626',
+                      border: `1px solid ${
+                        p.status === 'IN_PROGRESS'
+                          ? 'rgba(16, 185, 129, 0.3)'
+                          : p.status === 'PREPARING'
+                          ? 'rgba(245, 158, 11, 0.3)'
+                          : p.status === 'PAUSED'
+                          ? 'rgba(234, 88, 12, 0.3)'
+                          : p.status === 'COMPLETED'
+                          ? 'rgba(37, 99, 235, 0.3)'
+                          : 'rgba(239, 68, 68, 0.3)'
+                      }`,
+                    }}
+                  >
                     {getProjectStatusLabel(p.status)}
                   </span>
                 </td>
@@ -189,6 +238,17 @@ export const ProjectsPage: React.FC = () => {
             ))}
           </tbody>
         </table>
+
+        {/* Pagination Bar */}
+        <Pagination
+          currentPage={currentPage}
+          totalItems={projects.length}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={setPageSize}
+          pageSizeOptions={[5, 10, 20, 50]}
+          itemName="công trình"
+        />
       </div>
 
       {/* Create Project Modal */}

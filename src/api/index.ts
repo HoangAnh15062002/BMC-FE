@@ -134,6 +134,25 @@ export const estimateApi = {
     const res = await apiClient.get(`/projects/${projectId}/estimate-versions/${id}/export-excel`, {
       responseType: 'blob',
     });
+
+    // Check if backend provided filename in Content-Disposition header
+    const headers = res.headers || {};
+    const disposition = headers['content-disposition'] || headers['Content-Disposition'];
+    let finalFileName = filename;
+    if (disposition) {
+      const match = disposition.match(/filename\*?=['"]?(?:UTF-\d['"]*)?([^;\r\n"']*)['"]?/i);
+      if (match && match[1]) {
+        try {
+          finalFileName = decodeURIComponent(match[1].replace(/['"]/g, '').trim());
+        } catch {
+          finalFileName = match[1].replace(/['"]/g, '').trim();
+        }
+      }
+    }
+    if (!finalFileName.toLowerCase().endsWith('.xlsx')) {
+      finalFileName += '.xlsx';
+    }
+
     const blob = res.data instanceof Blob 
       ? res.data 
       : new Blob([res.data], {
@@ -141,16 +160,20 @@ export const estimateApi = {
         });
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
+    link.style.display = 'none';
     link.href = url;
-    link.download = filename.endsWith('.xlsx') ? filename : `${filename}.xlsx`;
+    link.download = finalFileName;
+    link.setAttribute('download', finalFileName);
     document.body.appendChild(link);
     link.click();
+
+    // Delay revoking URL by 10s so browser doesn't lose the filename and save as blob GUID!
     setTimeout(() => {
       if (document.body.contains(link)) {
         document.body.removeChild(link);
       }
       window.URL.revokeObjectURL(url);
-    }, 1000);
+    }, 10000);
   },
 };
 
@@ -311,6 +334,14 @@ export const siteApi = {
     const res = await apiClient.post<TaskProgressEntry>('/task-progress', data);
     return res.data;
   },
+  deleteProgress: async (id: number) => {
+    const res = await apiClient.delete(`/task-progress/${id}`);
+    return res.data;
+  },
+  getProgressSummary: async (projectTaskId: number) => {
+    const res = await apiClient.get(`/task-progress/task/${projectTaskId}/summary`).catch(() => ({ data: null }));
+    return res.data;
+  },
   getCosts: async (projectId?: number) => {
     if (!projectId) return null;
     const res = await apiClient.get<any>(`/actual-site-costs/project-summary/${projectId}`).catch(() => ({ data: null }));
@@ -437,9 +468,25 @@ export const adminApi = {
     const res = await apiClient.post<ProjectDocument>('/project-documents', data);
     return res.data;
   },
-  getUsers: async () => {
-    const res = await apiClient.get<any>('/users');
+  getUsers: async (search?: string) => {
+    const res = await apiClient.get<any>('/users', { params: { search } });
     return ensureArray<any>(res.data);
+  },
+  createUser: async (data: {
+    username: string;
+    password: string;
+    fullName: string;
+    email?: string;
+    phone?: string;
+    defaultRoleId?: number;
+    isActive?: boolean;
+  }) => {
+    const res = await apiClient.post<any>('/users', data);
+    return res.data;
+  },
+  toggleUserStatus: async (id: number) => {
+    const res = await apiClient.put<any>(`/users/${id}/toggle-status`);
+    return res.data;
   },
 };
 

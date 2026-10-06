@@ -907,6 +907,15 @@ input, select, textarea {
   padding-right: 36px;
 }
 
+.form-select-sm {
+  font-size: 0.8rem;
+  padding: 5px 24px 5px 10px !important;
+  background-position: right 8px center !important;
+  background-size: 10px 10px !important;
+  line-height: 1.4;
+  min-width: 135px;
+}
+
 .form-textarea { resize: vertical; min-height: 90px; }
 
 /* Inline form grid */
@@ -1383,3 +1392,21 @@ input, select, textarea {
     grid-template-columns: 1fr 1fr;
   }
 }
+
+/* ── Toast Notification Animation ── */
+@keyframes slideInRight {
+  from {
+    transform: translateX(110%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+

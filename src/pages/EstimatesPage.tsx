@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { estimateApi, projectApi, catalogsApi } from '../api';
 import { EstimateVersion, Project } from '../types';
 import { formatCurrency, formatDate } from '../utils/formatters';
+import { confirmDialog } from '../contexts/ConfirmContext';
 import {
   Calculator,
   Download,
@@ -21,6 +22,7 @@ import {
   Settings,
 } from 'lucide-react';
 import { EstimateDetailModal } from '../components/estimates/EstimateDetailModal';
+import { exportEstimateToExcel } from '../utils/estimateExcelExport';
 
 const DEFAULT_COST_COMPONENTS = [
   { costComponentCatalogId: 1, baseCode: 'DIRECT_COST', ratePercent: 6.5, calculationOrder: 10 },
@@ -171,11 +173,110 @@ export const EstimatesPage: React.FC = () => {
   const handleExportExcel = async (id: number, versionName?: string) => {
     if (!selectedProjectId) return;
     setDownloadingId(id);
+    const proj = projects.find(p => p.id === selectedProjectId);
+    const safeProject = (proj?.code || `Project_${selectedProjectId}`).replace(/[^a-zA-Z0-9_-]/g, '_');
+    const safeName = (versionName || `v${id}`).replace(/\s+/g, '_');
+    const filename = `DuToan_${safeProject}_${safeName}.xlsx`;
+
     try {
-      const safeName = (versionName || `v${id}`).replace(/\s+/g, '_');
-      await estimateApi.downloadExcel(selectedProjectId, id, `DuToan_${safeName}.xlsx`);
+      // 1. Prioritize official backend master export (7 sheets ClosedXML standard)
+      await estimateApi.downloadExcel(selectedProjectId, id, filename);
     } catch (err: any) {
-      alert('Lỗi khi tải file Excel dự toán');
+      console.warn('Backend excel export failed, falling back to client-side generator:', err);
+      try {
+        const detail: any = await estimateApi.getById(selectedProjectId, id);
+        
+        // Aggregate resources for Sheet 3
+        const resourceMap = new Map<string, any>();
+        const rawItems = detail.items || [];
+        const normalizedItems = rawItems.map((it: any, idx: number) => {
+          const code = it.itemCodeSnapshot || it.code || it.itemCode || `HM-${idx + 1}`;
+          const name = it.itemNameSnapshot || it.name || it.itemName || `Hạng mục ${idx + 1}`;
+          const material = it.totalMaterial ?? it.materialCost ?? 0;
+          const labor = it.totalLabor ?? it.laborCost ?? 0;
+          const machine = it.totalMachine ?? it.machineCost ?? 0;
+          const direct = it.totalDirectCost ?? it.totalAmount ?? (material + labor + machine);
+          const tasks = (it.tasks || []).map((t: any, tIdx: number) => {
+            const tQty = t.quantitySnapshot ?? t.quantity ?? 1;
+            // Aggregate resources if present
+            (t.resources || []).forEach((r: any) => {
+              const rType = r.resourceType || 'MATERIAL';
+              const rCode = r.resourceCodeSnapshot || r.code || 'VT-00';
+              const rName = r.resourceNameSnapshot || r.name || 'Tài nguyên';
+              const rUnit = r.unitCodeSnapshot || r.unit || '';
+              const rQty = r.requiredQuantity ?? ((r.normQuantitySnapshot || 0) * tQty);
+              const rPrice = r.unitPriceSnapshot ?? r.unitPrice ?? 0;
+              const rAmt = r.amount ?? (rQty * rPrice);
+              const key = `${rType}_${rCode}`;
+              if (resourceMap.has(key)) {
+                const ex = resourceMap.get(key);
+                ex.totalQuantity += rQty;
+                ex.totalAmount += rAmt;
+              } else {
+                resourceMap.set(key, {
+                  type: rType,
+                  code: rCode,
+                  name: rName,
+                  unit: rUnit,
+                  totalQuantity: rQty,
+                  unitPrice: rPrice,
+                  totalAmount: rAmt,
+                });
+              }
+            });
+
+            return {
+              code: t.taskCodeSnapshot || t.code || `CT-${tIdx + 1}`,
+              name: t.taskNameSnapshot || t.name || `Công tác ${tIdx + 1}`,
+              quantity: tQty,
+              unit: t.unitCode || t.unitCodeSnapshot || t.unitSymbolSnapshot || t.unitName || '',
+              unitPrice: t.unitPrice ?? 0,
+              materialTotal: t.materialTotal ?? (t.materialUnitPrice ? t.materialUnitPrice * tQty : 0),
+              laborTotal: t.laborTotal ?? (t.laborUnitPrice ? t.laborUnitPrice * tQty : 0),
+              machineTotal: t.machineTotal ?? (t.machineUnitPrice ? t.machineUnitPrice * tQty : 0),
+              directCost: t.directCost ?? t.amount ?? 0,
+            };
+          });
+          return {
+            code,
+            name,
+            totalMaterial: material,
+            totalLabor: labor,
+            totalMachine: machine,
+            totalDirectCost: direct,
+            tasks,
+          };
+        });
+
+        const totalDirect = detail.totalDirectCost ?? 0;
+        const totalBeforeTax = detail.totalBeforeTax ?? (totalDirect * 1.16);
+        const totalIndirect = detail.totalIndirectCost ?? Math.max(0, totalBeforeTax - totalDirect);
+        const vatRate = detail.vatRateSnapshot ?? 10;
+        const vatAmount = detail.vatAmount ?? (totalBeforeTax * (vatRate / 100));
+        const totalEst = detail.totalEstimate ?? detail.totalAfterTax ?? (totalBeforeTax + vatAmount);
+
+        exportEstimateToExcel({
+          projectName: proj?.name,
+          projectCode: proj?.code,
+          versionName: detail.versionName || detail.name || versionName,
+          versionNo: detail.versionNo || 1,
+          pricePeriod: detail.pricePeriodCodeSnapshot || detail.pricePeriodCode || 'PP-2024-Q1',
+          normStandard: 'Thông tư 12/2021/TT-BXD',
+          totalDirectCost: totalDirect,
+          totalMaterial: detail.totalMaterial ?? 0,
+          totalLabor: detail.totalLabor ?? 0,
+          totalMachine: detail.totalMachine ?? 0,
+          totalIndirectCost: totalIndirect,
+          totalBeforeTax,
+          vatRate,
+          vatAmount,
+          totalEstimate: totalEst,
+          items: normalizedItems,
+          aggregatedResources: Array.from(resourceMap.values()),
+        });
+      } catch (clientErr: any) {
+        alert('Lỗi khi xuất file Excel dự toán: ' + (clientErr.message || clientErr));
+      }
     } finally {
       setDownloadingId(null);
     }
@@ -184,7 +285,12 @@ export const EstimatesPage: React.FC = () => {
   const handleSubmit = async (est: EstimateVersion) => {
     if (!selectedProjectId) return;
     const name = est.versionName || est.name || `Phiên bản v${est.versionNo}`;
-    if (!confirm(`Xác nhận trình duyệt phiên bản "${name}"?`)) return;
+    if (!await confirmDialog({
+      title: 'Trình Duyệt Dự Toán',
+      message: `Xác nhận trình duyệt phiên bản "${name}"?`,
+      confirmText: 'Trình Duyệt',
+      type: 'info',
+    })) return;
     try {
       await estimateApi.submit(selectedProjectId, est.id, {
         rowVersion: est.rowVersion || undefined,
@@ -204,7 +310,12 @@ export const EstimatesPage: React.FC = () => {
   const handleApprove = async (est: EstimateVersion) => {
     if (!selectedProjectId) return;
     const name = est.versionName || est.name || `Phiên bản v${est.versionNo}`;
-    if (!confirm(`Xác nhận PHÊ DUYỆT phiên bản "${name}"? Đây là thao tác chính thức!`)) return;
+    if (!await confirmDialog({
+      title: 'Phê Duyệt Dự Toán',
+      message: `Xác nhận PHÊ DUYỆT phiên bản "${name}"? Thao tác này sẽ chính thức hóa dự toán dự án!`,
+      confirmText: 'Phê Duyệt Dự Toán',
+      type: 'warning',
+    })) return;
     try {
       await estimateApi.approve(selectedProjectId, est.id, {
         rowVersion: est.rowVersion || undefined,
@@ -224,7 +335,12 @@ export const EstimatesPage: React.FC = () => {
   const handleSetBaseline = async (est: EstimateVersion) => {
     if (!selectedProjectId) return;
     const name = est.versionName || est.name || `Phiên bản v${est.versionNo}`;
-    if (!confirm(`Đặt phiên bản "${name}" làm DỰ TOÁN MỐC (Baseline)? Baseline cũ sẽ bị thay thế.`)) return;
+    if (!await confirmDialog({
+      title: 'Thiết Lập Dự Toán Mốc (Baseline)',
+      message: `Đặt phiên bản "${name}" làm DỰ TOÁN MỐC (Baseline)? Baseline cũ sẽ bị thay thế.`,
+      confirmText: 'Xác Nhận Thiết Lập',
+      type: 'warning',
+    })) return;
     try {
       await estimateApi.setBaseline(selectedProjectId, est.id, {
         rowVersion: est.rowVersion || undefined,

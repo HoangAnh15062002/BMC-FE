@@ -15,7 +15,9 @@ import {
   CreditCard,
   Receipt,
   Phone,
-  MapPin
+  MapPin,
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
 
 interface PODetailModalProps {
@@ -32,6 +34,7 @@ export const PODetailModal: React.FC<PODetailModalProps> = ({
   onApprove,
 }) => {
   const [submitting, setSubmitting] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   if (!isOpen || !order) return null;
 
@@ -112,17 +115,19 @@ export const PODetailModal: React.FC<PODetailModalProps> = ({
       <div
         className="card"
         style={{
-          width: '95vw',
-          maxWidth: '1240px',
-          maxHeight: '92vh',
+          width: isFullscreen ? '100vw' : '96vw',
+          maxWidth: isFullscreen ? '100vw' : '1600px',
+          height: isFullscreen ? '100vh' : '95vh',
+          maxHeight: isFullscreen ? '100vh' : '95vh',
           display: 'flex',
           flexDirection: 'column',
           backgroundColor: '#ffffff',
-          border: '1px solid #e2e8f0',
-          borderRadius: '16px',
-          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.15)',
+          border: isFullscreen ? 'none' : '1px solid #e2e8f0',
+          borderRadius: isFullscreen ? 0 : '16px',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
           overflow: 'hidden',
           animation: 'fadeIn 0.2s ease-out',
+          transition: 'all 0.15s ease',
         }}
       >
         {/* Header */}
@@ -170,6 +175,25 @@ export const PODetailModal: React.FC<PODetailModalProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <button
               className="btn btn-secondary btn-sm"
+              onClick={() => setIsFullscreen(!isFullscreen)}
+              title={isFullscreen ? 'Thu nhỏ giao diện' : 'Toàn màn hình'}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: '13px',
+                padding: '6px 12px',
+                borderRadius: '8px',
+                fontWeight: 600,
+                backgroundColor: isFullscreen ? 'rgba(37, 99, 235, 0.1)' : undefined,
+                color: isFullscreen ? '#2563eb' : undefined,
+              }}
+            >
+              {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+              <span>{isFullscreen ? 'Thu nhỏ' : 'Toàn màn hình'}</span>
+            </button>
+            <button
+              className="btn btn-secondary btn-sm"
               onClick={handlePrint}
               style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}
             >
@@ -178,7 +202,7 @@ export const PODetailModal: React.FC<PODetailModalProps> = ({
             <button
               className="btn-icon"
               onClick={onClose}
-              style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748b' }}
+              style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             >
               <X size={22} />
             </button>

@@ -16,10 +16,13 @@ import {
   Search,
   CheckCircle,
   Eye,
-  Info
+  Info,
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
 import { formatCurrency, formatNumber, formatDate, formatQuantityWithUnit, formatUnit } from '../../utils/formatters';
 import { estimateApi } from '../../api';
+import { exportEstimateToExcel } from '../../utils/estimateExcelExport';
 
 interface EstimateDetailModalProps {
   isOpen: boolean;
@@ -43,6 +46,8 @@ export const EstimateDetailModal: React.FC<EstimateDetailModalProps> = ({
   const [expandedItems, setExpandedItems] = useState<Record<number, boolean>>({ 0: true, 1: true });
   const [selectedTaskResources, setSelectedTaskResources] = useState<any | null>(null);
   const [resourceFilterType, setResourceFilterType] = useState<'ALL' | 'MATERIAL' | 'LABOR' | 'MACHINE'>('ALL');
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   // Key Financial Figures from API or fallback
   const totalDirectCost = estimate?.totalDirectCost ?? 0;
@@ -176,12 +181,50 @@ export const EstimateDetailModal: React.FC<EstimateDetailModalProps> = ({
   };
 
   const handleExportExcel = async () => {
-    if (projectId && estimate.id) {
+    setExporting(true);
+    const pId = projectId || estimate?.projectId;
+    const eId = estimate?.id;
+    const safeProject = (projectCode || `Project_${pId}`).replace(/[^a-zA-Z0-9_-]/g, '_');
+    const safeName = (estimate.name || estimate.versionName || `v${estimate.versionNo || 1}`).replace(/\s+/g, '_');
+    const filename = `DuToan_${safeProject}_${safeName}.xlsx`;
+
+    if (pId && eId) {
       try {
-        await estimateApi.downloadExcel(projectId, estimate.id, `DuToan_${projectCode}_v${estimate.versionNo}.xlsx`);
-      } catch (err) {
-        alert('Đang tải file Excel dự toán...');
+        // 1. Try official backend master export (7 sheets ClosedXML)
+        await estimateApi.downloadExcel(pId, eId, filename);
+        setTimeout(() => setExporting(false), 1000);
+        return;
+      } catch (backendErr) {
+        console.warn('Backend excel export failed, falling back to client-side generator:', backendErr);
       }
+    }
+
+    // 2. Fallback to client-side generator
+    try {
+      exportEstimateToExcel({
+        projectName,
+        projectCode,
+        versionName: estimate.name || estimate.versionName,
+        versionNo: estimate.versionNo || 1,
+        pricePeriod: estimate.pricePeriodCodeSnapshot || estimate.pricePeriodCode || 'PP-2024-Q1',
+        normStandard: 'Thông tư 12/2021/TT-BXD',
+        totalDirectCost,
+        totalMaterial,
+        totalLabor,
+        totalMachine,
+        totalIndirectCost,
+        totalBeforeTax,
+        vatRate,
+        vatAmount,
+        totalEstimate,
+        items,
+        aggregatedResources,
+      });
+      setTimeout(() => setExporting(false), 1200);
+    } catch (err: any) {
+      setExporting(false);
+      console.error('Error exporting estimate to excel:', err);
+      alert('Lỗi khi xuất file Excel dự toán: ' + (err.message || err));
     }
   };
 
@@ -226,17 +269,19 @@ export const EstimateDetailModal: React.FC<EstimateDetailModalProps> = ({
       <div
         className="card"
         style={{
-          width: '100%',
-          maxWidth: '1240px',
-          maxHeight: '94vh',
+          width: isFullscreen ? '100vw' : '96vw',
+          maxWidth: isFullscreen ? '100vw' : '1680px',
+          height: isFullscreen ? '100vh' : '95vh',
+          maxHeight: isFullscreen ? '100vh' : '95vh',
           display: 'flex',
           flexDirection: 'column',
           backgroundColor: '#ffffff',
-          borderRadius: '16px',
-          border: '1px solid #e2e8f0',
+          borderRadius: isFullscreen ? 0 : '16px',
+          border: isFullscreen ? 'none' : '1px solid #e2e8f0',
           boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
           overflow: 'hidden',
           animation: 'fadeIn 0.2s ease-out',
+          transition: 'all 0.15s ease',
         }}
       >
         {/* Header */}
@@ -289,16 +334,36 @@ export const EstimateDetailModal: React.FC<EstimateDetailModalProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <button
               className="btn btn-secondary btn-sm"
+              onClick={() => setIsFullscreen(!isFullscreen)}
+              title={isFullscreen ? 'Thu nhỏ giao diện' : 'Toàn màn hình'}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: '13px',
+                padding: '6px 12px',
+                borderRadius: '8px',
+                fontWeight: 600,
+                backgroundColor: isFullscreen ? 'rgba(249, 115, 22, 0.1)' : undefined,
+                color: isFullscreen ? 'var(--brand-600)' : undefined,
+              }}
+            >
+              {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+              <span>{isFullscreen ? 'Thu nhỏ' : 'Toàn màn hình'}</span>
+            </button>
+            <button
+              className="btn btn-secondary btn-sm"
               onClick={handleExportExcel}
+              disabled={exporting}
               style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}
             >
               <Download size={14} />
-              <span>Xuất Excel BOQ</span>
+              <span>{exporting ? 'Đang tạo Excel...' : 'Xuất Excel BOQ'}</span>
             </button>
             <button
               className="btn-icon"
               onClick={onClose}
-              style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748b' }}
+              style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             >
               <X size={22} />
             </button>

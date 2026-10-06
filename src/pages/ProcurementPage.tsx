@@ -3,6 +3,7 @@ import { procurementApi, projectApi, catalogsApi } from '../api';
 import { Supplier, PurchaseRequest, PurchaseOrder, Project } from '../types';
 import { formatCurrency, formatDate, getPurchaseStatusLabel, getStatusBadgeClass } from '../utils/formatters';
 import { ShoppingCart, Truck, FileCheck, Plus, Check, X, Building2, Send, Eye } from 'lucide-react';
+import { confirmDialog } from '../contexts/ConfirmContext';
 import { PRDetailModal } from '../components/procurement/PRDetailModal';
 import { PODetailModal } from '../components/procurement/PODetailModal';
 
@@ -116,7 +117,12 @@ export const ProcurementPage: React.FC = () => {
   };
 
   const handleApproveRequest = async (id: number) => {
-    if (!confirm('Xác nhận phê duyệt phiếu yêu cầu vật tư này?')) return;
+    if (!await confirmDialog({
+      title: 'Phê Duyệt Phiếu Yêu Cầu',
+      message: 'Xác nhận phê duyệt phiếu yêu cầu vật tư này?',
+      confirmText: 'Phê Duyệt',
+      type: 'info',
+    })) return;
     try {
       await procurementApi.approvePurchaseRequest(id);
       alert('Đã phê duyệt phiếu yêu cầu vật tư thành công!');
@@ -137,7 +143,12 @@ export const ProcurementPage: React.FC = () => {
   };
 
   const handleSubmitRequest = async (id: number) => {
-    if (!confirm('Xác nhận gửi phiếu yêu cầu này lên duyệt?')) return;
+    if (!await confirmDialog({
+      title: 'Gửi Duyệt Phiếu Yêu Cầu',
+      message: 'Xác nhận gửi phiếu yêu cầu này lên cấp quản lý duyệt?',
+      confirmText: 'Gửi Duyệt',
+      type: 'info',
+    })) return;
     try {
       await procurementApi.submitPurchaseRequest(id);
       alert('Đã gửi phiếu yêu cầu thành công!');
@@ -148,7 +159,12 @@ export const ProcurementPage: React.FC = () => {
   };
 
   const handleApproveOrder = async (id: number) => {
-    if (!confirm('Xác nhận phê duyệt đơn đặt hàng PO này?')) return;
+    if (!await confirmDialog({
+      title: 'Phê Duyệt Đơn Đặt Hàng',
+      message: 'Xác nhận phê duyệt đơn đặt hàng PO này?',
+      confirmText: 'Phê Duyệt PO',
+      type: 'info',
+    })) return;
     try {
       await procurementApi.approvePurchaseOrder(id);
       alert('Đã phê duyệt đơn đặt hàng PO thành công!');

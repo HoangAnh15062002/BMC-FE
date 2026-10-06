@@ -3,6 +3,7 @@ import { Contract, ContractAppendix } from '../../types';
 import { adminApi, uploadApi } from '../../api';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { exportContractToWord } from '../../utils/wordExport';
+import { parseContractMeta } from '../../utils/contractHelper';
 import {
   X,
   FileText,
@@ -19,7 +20,21 @@ import {
   Eye,
   FileEdit,
   CheckCircle2,
+  Maximize2,
+  Minimize2,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
+  Building2,
+  Users,
+  ShieldCheck,
 } from 'lucide-react';
+
+const cleanFileName = (urlOrName?: string | null) => {
+  if (!urlOrName) return '';
+  const raw = urlOrName.split('/').pop() || '';
+  return decodeURIComponent(raw).replace(/^[a-f0-9]{32}_/i, '');
+};
 
 interface ContractDetailModalProps {
   contractId: number;
@@ -33,8 +48,11 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
   onUpdated,
 }) => {
   const [contract, setContract] = useState<Contract | null>(null);
+  const meta = contract ? parseContractMeta(contract) : null;
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'scan' | 'agreement' | 'appendices'>('scan');
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [readingZoom, setReadingZoom] = useState(1.1);
   const [showAddAppendix, setShowAddAppendix] = useState(false);
   const [submittingAppendix, setSubmittingAppendix] = useState(false);
   const [uploadingScan, setUploadingScan] = useState(false);
@@ -138,7 +156,16 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
     setUploadingWord(true);
     try {
       const uploadRes = await uploadApi.uploadFile(file);
+      let existingObj: any = {};
+      if (contract.description) {
+        try {
+          existingObj = JSON.parse(contract.description);
+        } catch {}
+      }
       const descData = JSON.stringify({
+        ...existingObj,
+        contractType: meta?.contractType || existingObj.contractType,
+        partnerName: meta?.partnerName || existingObj.partnerName,
         wordUrl: uploadRes.url,
         fileName: file.name,
         uploadedAt: new Date().toISOString(),
@@ -272,9 +299,9 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
           </div>
 
           <div class="contract-title">
-            <h1>HỢP ĐỒNG THI CÔNG XÂY DỰNG CÔNG TRÌNH</h1>
+            <h1>${meta?.contractTitle || 'HỢP ĐỒNG XÂY DỰNG'}</h1>
             <div class="sub">Số: <strong>${contract.contractNo}</strong></div>
-            <div style="font-size: 11.5pt; margin-top: 4px;">Gói thầu: <strong>${contract.contractName}</strong></div>
+            <div style="font-size: 11.5pt; margin-top: 4px;">Gói thầu / Hạng mục: <strong>${contract.contractName}</strong></div>
             <div style="font-size: 11pt;">Công trình: <strong>${contract.projectName || `Dự án #${contract.projectId}`}</strong></div>
           </div>
 
@@ -288,41 +315,45 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
           <p>Hôm nay, ngày ${formatDate(contract.signedDate)}, tại văn phòng điều hành công trình, hai bên gồm có:</p>
 
           <div class="party-box">
-            <div class="party-title">BÊN GIAO THẦU (CHỦ ĐẦU TƯ - BÊN A):</div>
+            <div class="party-title">${meta?.partyA.title || 'BÊN GIAO THẦU (BÊN A)'}:</div>
             <table class="party-table">
               <tr>
                 <td style="width: 25%; font-weight: bold;">Tên đơn vị:</td>
-                <td><strong>${contract.projectName?.includes('Móng M02B') ? 'TẬP ĐOÀN NAM LONG GROUP' : 'BAN QUẢN LÝ DỰ ÁN ĐẦU TƯ XÂY DỰNG'}</strong></td>
+                <td><strong>${meta?.partyA.name || 'Đại diện Bên A'}</strong></td>
               </tr>
               <tr>
-                <td style="font-weight: bold;">Đại diện:</td>
-                <td>Ông/Bà Đại diện theo ủy quyền của Chủ Đầu Tư</td>
+                <td style="font-weight: bold;">Người đại diện:</td>
+                <td>${meta?.partyA.rep || 'Ban Lãnh Đạo'}</td>
               </tr>
               <tr>
-                <td style="font-weight: bold;">Địa chỉ:</td>
-                <td>Địa chỉ trụ sở Ban Quản lý / Chủ đầu tư dự án</td>
+                <td style="font-weight: bold;">Mã số thuế:</td>
+                <td>${meta?.partyA.taxCode || 'Theo hồ sơ pháp lý'}</td>
+              </tr>
+              <tr>
+                <td style="font-weight: bold;">Địa chỉ / Trụ sở:</td>
+                <td>${meta?.partyA.address || 'Theo hồ sơ hợp đồng'}</td>
               </tr>
             </table>
           </div>
 
           <div class="party-box">
-            <div class="party-title">BÊN NHẬN THẦU (NHÀ THẦU THI CÔNG - BÊN B):</div>
+            <div class="party-title">${meta?.partyB.title || 'BÊN NHẬN THẦU (BÊN B)'}:</div>
             <table class="party-table">
               <tr>
                 <td style="width: 25%; font-weight: bold;">Tên doanh nghiệp:</td>
-                <td><strong>CÔNG TY CỔ PHẦN XÂY DỰNG KỸ THUẬT BMC</strong></td>
+                <td><strong>${meta?.partyB.name || 'CÔNG TY CỔ PHẦN XÂY DỰNG KỸ THUẬT BMC'}</strong></td>
               </tr>
               <tr>
-                <td style="font-weight: bold;">Đại diện pháp luật:</td>
-                <td>Ban Giám Đốc Công Ty</td>
+                <td style="font-weight: bold;">Người đại diện:</td>
+                <td>${meta?.partyB.rep || 'Ban Giám Đốc'}</td>
               </tr>
               <tr>
                 <td style="font-weight: bold;">Mã số thuế:</td>
-                <td>3700148567</td>
+                <td>${meta?.partyB.taxCode || '3700148567'}</td>
               </tr>
               <tr>
                 <td style="font-weight: bold;">Địa chỉ:</td>
-                <td>Khu đô thị sinh thái Chánh Mỹ, Phường Chánh Mỹ, TP. Thủ Dầu Một, Tỉnh Bình Dương</td>
+                <td>${meta?.partyB.address || 'Khu đô thị sinh thái Chánh Mỹ, Phường Chánh Mỹ, TP. Thủ Dầu Một, Tỉnh Bình Dương'}</td>
               </tr>
             </table>
           </div>
@@ -409,13 +440,14 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
       style={{
         position: 'fixed',
         inset: 0,
-        backgroundColor: 'rgba(15, 23, 42, 0.75)',
-        backdropFilter: 'blur(5px)',
+        backgroundColor: 'rgba(15, 23, 42, 0.72)',
+        backdropFilter: 'blur(6px)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         zIndex: 1100,
-        padding: '16px',
+        padding: isFullscreen ? 0 : '16px',
+        animation: 'fadeIn 0.2s ease-out',
       }}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
@@ -424,17 +456,22 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
       <div
         className="card"
         style={{
-          width: '1100px',
-          maxWidth: '100%',
-          height: '95vh',
+          width: isFullscreen ? '100vw' : '96vw',
+          maxWidth: isFullscreen ? '100vw' : '1620px',
+          height: isFullscreen ? '100vh' : '92vh',
+          maxHeight: isFullscreen ? '100vh' : '92vh',
           display: 'flex',
           flexDirection: 'column',
-          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
-          borderRadius: '16px',
+          boxShadow: '0 25px 60px -15px rgba(15, 23, 42, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.1)',
+          borderRadius: isFullscreen ? 0 : '16px',
+          backgroundColor: '#ffffff',
           overflow: 'hidden',
           padding: 0,
+          transition: 'all 0.15s ease',
         }}
       >
+        {/* Top colored accent line */}
+        <div style={{ height: '3px', background: 'linear-gradient(90deg, #ea580c 0%, #2563eb 50%, #16a34a 100%)', flexShrink: 0 }} />
         {/* Hidden File Inputs */}
         <input
           type="file"
@@ -451,361 +488,433 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
           onChange={handleUploadWordDoc}
         />
 
-        {/* Top Header */}
+        {/* Top Header & Compact Summary */}
         <div
           style={{
-            padding: '16px 24px',
+            padding: '12px 20px',
             borderBottom: '1px solid var(--border-color)',
+            backgroundColor: '#ffffff',
+            flexShrink: 0,
             display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.06) 0%, rgba(234, 88, 12, 0.08) 100%)',
+            flexDirection: 'column',
+            gap: '8px',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-            <div
-              style={{
-                width: '46px',
-                height: '46px',
-                borderRadius: '12px',
-                backgroundColor: 'rgba(37, 99, 235, 0.12)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'var(--blue-tech)',
-              }}
-            >
-              <FileText size={24} />
-            </div>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          {/* Row 1: Code, Title, Tags & Main Actions */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
+              <div
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '10px',
+                  background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
+                  border: '1px solid #bfdbfe',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#2563eb',
+                  flexShrink: 0,
+                }}
+              >
+                <FileText size={19} />
+              </div>
+              
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', minWidth: 0 }}>
                 <span
                   style={{
+                    fontFamily: 'monospace',
                     fontWeight: 700,
-                    fontSize: '0.9rem',
-                    color: 'var(--blue-tech)',
-                    backgroundColor: 'rgba(37, 99, 235, 0.1)',
-                    padding: '2px 10px',
+                    fontSize: '0.82rem',
+                    color: '#1e3a8a',
+                    backgroundColor: '#eff6ff',
+                    border: '1px solid #bfdbfe',
+                    padding: '2px 8px',
                     borderRadius: '6px',
+                    letterSpacing: '0.3px',
                   }}
                 >
                   {contract.contractNo}
                 </span>
-                <span className="badge badge-active">{contract.status || 'ACTIVE'}</span>
-                {contract.fileUrl && (
+
+                {/* Contract Type Badge */}
+                {meta && (
+                  <span
+                    style={{
+                      fontWeight: 700,
+                      fontSize: '0.76rem',
+                      padding: '2px 8px',
+                      borderRadius: '6px',
+                      backgroundColor:
+                        meta.contractType === 'OWNER'
+                          ? 'rgba(37, 99, 235, 0.08)'
+                          : meta.contractType === 'SUBCONTRACTOR'
+                          ? 'rgba(147, 51, 234, 0.08)'
+                          : meta.contractType === 'SUPPLIER'
+                          ? 'rgba(16, 185, 129, 0.08)'
+                          : 'rgba(100, 116, 139, 0.08)',
+                      color:
+                        meta.contractType === 'OWNER'
+                          ? '#1d4ed8'
+                          : meta.contractType === 'SUBCONTRACTOR'
+                          ? '#7e22ce'
+                          : meta.contractType === 'SUPPLIER'
+                          ? '#047857'
+                          : '#334155',
+                      border: `1px solid ${
+                        meta.contractType === 'OWNER'
+                          ? 'rgba(37, 99, 235, 0.25)'
+                          : meta.contractType === 'SUBCONTRACTOR'
+                          ? 'rgba(147, 51, 234, 0.25)'
+                          : meta.contractType === 'SUPPLIER'
+                          ? 'rgba(16, 185, 129, 0.25)'
+                          : 'rgba(100, 116, 139, 0.25)'
+                      }`,
+                    }}
+                  >
+                    {meta.contractType === 'OWNER' ? '🏢 ' : meta.contractType === 'SUBCONTRACTOR' ? '🔨 ' : meta.contractType === 'SUPPLIER' ? '🚚 ' : '📐 '}
+                    {meta.badgeText} ({meta.isRevenue ? '+ Doanh thu' : '- Chi phí'})
+                  </span>
+                )}
+
+                <span className="badge badge-active" style={{ fontSize: '0.72rem', padding: '2px 7px' }}>
+                  {contract.status || 'ACTIVE'}
+                </span>
+
+                {contract.fileUrl ? (
                   <span
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: '4px',
-                      fontSize: '0.75rem',
+                      fontSize: '0.72rem',
                       fontWeight: 700,
                       color: '#dc2626',
-                      backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                      backgroundColor: 'rgba(239, 68, 68, 0.08)',
                       border: '1px solid rgba(239, 68, 68, 0.2)',
-                      padding: '2px 8px',
+                      padding: '2px 7px',
+                      borderRadius: '6px',
+                    }}
+                    title="Đã lưu trữ bản PDF scan có dấu đỏ pháp lý"
+                  >
+                    <FileCheck size={12} /> Scan Dấu Đỏ
+                  </span>
+                ) : (
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      fontSize: '0.72rem',
+                      fontWeight: 600,
+                      color: 'var(--text-muted)',
+                      backgroundColor: '#f1f5f9',
+                      padding: '2px 7px',
                       borderRadius: '6px',
                     }}
                   >
-                    <FileCheck size={12} /> Đã có scan PDF (Dấu đỏ)
+                    Chưa có Scan PDF
                   </span>
                 )}
+
                 {attachedWord && (
                   <span
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: '4px',
-                      fontSize: '0.75rem',
+                      fontSize: '0.72rem',
                       fontWeight: 700,
                       color: '#2563eb',
-                      backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                      backgroundColor: 'rgba(37, 99, 235, 0.08)',
                       border: '1px solid rgba(37, 99, 235, 0.2)',
-                      padding: '2px 8px',
+                      padding: '2px 7px',
                       borderRadius: '6px',
                     }}
+                    title="Đã đính kèm tệp Word soạn thảo"
                   >
-                    <FileEdit size={12} /> Đã đính kèm file Word
+                    <FileEdit size={12} /> File Word
                   </span>
                 )}
               </div>
-              <h2 style={{ margin: '4px 0 0 0', fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-main)' }}>
-                {contract.contractName}
-              </h2>
-              <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                Công trình: <strong>{contract.projectName || `Dự án #${contract.projectId}`}</strong>
-              </div>
+            </div>
+
+            {/* Quick Actions (Full screen, Print, Close) */}
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => setIsFullscreen(!isFullscreen)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  fontWeight: 600,
+                  fontSize: '0.8rem',
+                  padding: '5px 10px',
+                  color: isFullscreen ? 'var(--blue-tech)' : 'var(--text-main)',
+                  backgroundColor: isFullscreen ? 'rgba(37, 99, 235, 0.08)' : undefined,
+                  borderColor: isFullscreen ? 'var(--blue-tech)' : undefined,
+                }}
+                title={isFullscreen ? 'Thu nhỏ cửa sổ' : 'Phóng to toàn màn hình'}
+              >
+                {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                <span>{isFullscreen ? 'Thu Nhỏ' : 'Toàn Màn Hình'}</span>
+              </button>
+
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={handlePrint}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontWeight: 600, fontSize: '0.8rem', padding: '5px 10px' }}
+                title="In trích yếu hợp đồng khổ A4"
+              >
+                <Printer size={14} /> In Trích Yếu
+              </button>
+
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={onClose}
+                style={{
+                  borderRadius: '50%',
+                  width: '32px',
+                  height: '32px',
+                  padding: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#64748b',
+                }}
+                title="Đóng cửa sổ (Esc)"
+              >
+                <X size={17} />
+              </button>
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <button
-              className="btn btn-secondary btn-sm"
-              onClick={handlePrint}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-            >
-              <Printer size={15} /> In Trích Yếu A4
-            </button>
+          {/* Row 2: Contract Name */}
+          <h2 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', lineHeight: 1.3 }}>
+            {contract.contractName}
+          </h2>
 
-            <button
-              className="btn btn-secondary btn-sm"
-              onClick={onClose}
-              style={{ borderRadius: '50%', width: '32px', height: '32px', padding: 0 }}
-            >
-              <X size={18} />
-            </button>
-          </div>
-        </div>
+          {/* Row 3: Meta & Compact Inline Financial Bar */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '12px',
+              paddingTop: '2px',
+            }}
+          >
+            {/* Project & Partner */}
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <Building2 size={13} style={{ color: 'var(--blue-tech)' }} /> Công trình: <strong style={{ color: '#1e293b' }}>{contract.projectName || `Dự án #${contract.projectId}`}</strong>
+              </span>
+              {meta && (
+                <>
+                  <span style={{ color: '#cbd5e1' }}>•</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <Users size={13} style={{ color: 'var(--orange-primary)' }} /> Đối tác: <strong style={{ color: '#1e293b' }}>{meta.partnerName}</strong> ({meta.partnerRole})
+                  </span>
+                </>
+              )}
+            </div>
 
-        {/* Financial KPI bar */}
-        <div
-          style={{
-            padding: '12px 24px',
-            backgroundColor: 'var(--bg-card-subtle, #f8fafc)',
-            borderBottom: '1px solid var(--border-color)',
-            display: 'grid',
-            gridTemplateColumns: 'repeat(4, 1fr)',
-            gap: '12px',
-          }}
-        >
-          <div>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>Giá Trị Ký Ban Đầu:</span>
-            <strong style={{ fontSize: '1.05rem', color: 'var(--text-main)' }}>{formatCurrency(contract.contractValue)}</strong>
-          </div>
-          <div>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>Phát Sinh Từ Phụ Lục:</span>
-            <strong style={{ fontSize: '1.05rem', color: 'var(--orange-primary)' }}>+{formatCurrency(totalAppendixValue)}</strong>
-          </div>
-          <div>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>Tổng Giá Trị Sau Điều Chỉnh:</span>
-            <strong style={{ fontSize: '1.15rem', color: 'var(--emerald-success)' }}>
-              {formatCurrency(contract.totalAdjustedValue || contract.contractValue + totalAppendixValue)}
-            </strong>
-          </div>
-          <div>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>Ngày Ký & Thời Hạn:</span>
-            <strong style={{ fontSize: '0.95rem' }}>{formatDate(contract.signedDate)} (VAT: {contract.vatRate || 10}%)</strong>
-          </div>
-        </div>
-
-        {/* Dedicated Dual Document Toolbar (WORD & PDF) */}
-        <div
-          style={{
-            padding: '12px 24px',
-            backgroundColor: '#ffffff',
-            borderBottom: '1px solid var(--border-color)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '12px',
-          }}
-        >
-          {/* WORD Actions */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1d4ed8', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <FileEdit size={16} /> File Word (Hợp Đồng Gốc):
-            </span>
-            <button
-              className="btn btn-primary btn-sm"
-              onClick={handleDownloadWord}
+            {/* Compact Financial KPI Strip */}
+            <div
               style={{
-                backgroundColor: '#2563eb',
-                borderColor: '#1d4ed8',
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: '6px',
+                backgroundColor: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                borderRadius: '8px',
+                padding: '4px 10px',
+                gap: '12px',
+                fontSize: '0.78rem',
               }}
-              title="Tải về file Word (.doc/.docx) để mở và chỉnh sửa trên máy tính"
             >
-              <Download size={14} /> Tải File Word Hợp Đồng Gốc
-            </button>
-            <button
-              className="btn btn-secondary btn-sm"
-              onClick={() => wordInputRef.current?.click()}
-              disabled={uploadingWord}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-              title="Đính kèm file Word (.docx) soạn thảo gốc vào hồ sơ"
-            >
-              <UploadCloud size={14} /> {uploadingWord ? 'Đang tải...' : attachedWord ? 'Đổi File Word' : 'Đính Kèm File Word'}
-            </button>
-          </div>
-
-          {/* PDF Actions */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#dc2626', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <FileText size={16} /> File PDF (Hợp Đồng Scan Dấu Đỏ):
-            </span>
-            {contract.fileUrl ? (
-              <>
-                <a
-                  href={contract.fileUrl}
-                  download={`${contract.contractNo}_ScanDauDo.pdf`}
-                  className="btn btn-secondary btn-sm"
-                  style={{
-                    color: '#dc2626',
-                    borderColor: 'rgba(239, 68, 68, 0.4)',
-                    backgroundColor: 'rgba(239, 68, 68, 0.05)',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    textDecoration: 'none',
-                    fontWeight: 600,
-                  }}
-                  title="Tải về file PDF scan hợp đồng có dấu đỏ"
-                >
-                  <Download size={14} /> Tải File Scan PDF
-                </a>
-                <button
-                  className="btn btn-secondary btn-sm"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploadingScan}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                >
-                  <UploadCloud size={14} /> {uploadingScan ? 'Đang tải...' : 'Đổi File Scan PDF'}
-                </button>
-              </>
-            ) : (
-              <button
-                className="btn btn-secondary btn-sm"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploadingScan}
-                style={{
-                  color: '#dc2626',
-                  borderColor: 'rgba(239, 68, 68, 0.4)',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                }}
-              >
-                <UploadCloud size={14} /> {uploadingScan ? 'Đang tải...' : 'Tải Lên Scan PDF'}
-              </button>
-            )}
+              <div>
+                <span style={{ color: 'var(--text-muted)', marginRight: '5px' }}>Ký ban đầu:</span>
+                <strong style={{ color: '#0f172a' }}>{formatCurrency(contract.contractValue)}</strong>
+              </div>
+              <span style={{ color: '#cbd5e1' }}>|</span>
+              <div>
+                <span style={{ color: 'var(--text-muted)', marginRight: '5px' }}>Phát sinh ({contract.appendices?.length || 0}):</span>
+                <strong style={{ color: totalAppendixValue > 0 ? 'var(--orange-primary)' : 'var(--text-muted)' }}>
+                  {totalAppendixValue > 0 ? `+${formatCurrency(totalAppendixValue)}` : '0 đ'}
+                </strong>
+              </div>
+              <span style={{ color: '#cbd5e1' }}>|</span>
+              <div style={{ backgroundColor: 'rgba(22, 163, 74, 0.08)', padding: '2px 8px', borderRadius: '5px', border: '1px solid rgba(22, 163, 74, 0.2)' }}>
+                <span style={{ color: '#15803d', fontWeight: 600, marginRight: '5px' }}>Tổng điều chỉnh:</span>
+                <strong style={{ color: '#16a34a', fontWeight: 800 }}>
+                  {formatCurrency(contract.totalAdjustedValue || contract.contractValue + totalAppendixValue)}
+                </strong>
+              </div>
+              <span style={{ color: '#cbd5e1' }}>|</span>
+              <div>
+                <span style={{ color: 'var(--text-muted)', marginRight: '4px' }}>Ký:</span>
+                <strong style={{ color: '#334155' }}>{formatDate(contract.signedDate)}</strong>
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem', marginLeft: '3px' }}>(VAT {contract.vatRate || 10}%)</span>
+              </div>
+            </div>
           </div>
         </div>
 
         {/* Tab Switcher */}
-        <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', padding: '0 24px', backgroundColor: '#f8fafc' }}>
-          <button
-            onClick={() => setActiveTab('scan')}
-            style={{
-              padding: '12px 18px',
-              border: 'none',
-              background: 'none',
-              cursor: 'pointer',
-              fontWeight: 600,
-              fontSize: '0.9rem',
-              color: activeTab === 'scan' ? '#ef4444' : 'var(--text-muted)',
-              borderBottom: activeTab === 'scan' ? '3px solid #ef4444' : '3px solid transparent',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-            }}
-          >
-            <FileText size={16} /> 📑 Bản Scan PDF Hợp Đồng (Dấu Đỏ)
-            {contract.fileUrl && (
-              <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#ef4444' }} />
-            )}
-          </button>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            borderBottom: '1px solid var(--border-color)',
+            padding: '0 20px',
+            backgroundColor: '#f8fafc',
+            flexShrink: 0,
+          }}
+        >
+          <div style={{ display: 'flex', gap: '4px' }}>
+            <button
+              onClick={() => setActiveTab('scan')}
+              style={{
+                padding: '9px 16px',
+                border: 'none',
+                background: 'none',
+                cursor: 'pointer',
+                fontWeight: 700,
+                fontSize: '0.84rem',
+                color: activeTab === 'scan' ? '#dc2626' : 'var(--text-muted)',
+                borderBottom: activeTab === 'scan' ? '3px solid #dc2626' : '3px solid transparent',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '7px',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <FileText size={15} /> Bản Scan PDF (Dấu Đỏ)
+              {contract.fileUrl && (
+                <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: '#dc2626' }} />
+              )}
+            </button>
 
-          <button
-            onClick={() => setActiveTab('agreement')}
-            style={{
-              padding: '12px 18px',
-              border: 'none',
-              background: 'none',
-              cursor: 'pointer',
-              fontWeight: 600,
-              fontSize: '0.9rem',
-              color: activeTab === 'agreement' ? 'var(--blue-tech)' : 'var(--text-muted)',
-              borderBottom: activeTab === 'agreement' ? '3px solid var(--blue-tech)' : '3px solid transparent',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-            }}
-          >
-            <BookOpen size={16} /> 📜 Văn Bản Điều Khoản Hợp Đồng & Xuất Word
-          </button>
+            <button
+              onClick={() => setActiveTab('agreement')}
+              style={{
+                padding: '9px 16px',
+                border: 'none',
+                background: 'none',
+                cursor: 'pointer',
+                fontWeight: 700,
+                fontSize: '0.84rem',
+                color: activeTab === 'agreement' ? 'var(--blue-tech)' : 'var(--text-muted)',
+                borderBottom: activeTab === 'agreement' ? '3px solid var(--blue-tech)' : '3px solid transparent',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '7px',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <BookOpen size={15} /> Soạn Thảo & File Word
+              {attachedWord && (
+                <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: '#2563eb' }} />
+              )}
+            </button>
 
-          <button
-            onClick={() => setActiveTab('appendices')}
-            style={{
-              padding: '12px 18px',
-              border: 'none',
-              background: 'none',
-              cursor: 'pointer',
-              fontWeight: 600,
-              fontSize: '0.9rem',
-              color: activeTab === 'appendices' ? 'var(--orange-primary)' : 'var(--text-muted)',
-              borderBottom: activeTab === 'appendices' ? '3px solid var(--orange-primary)' : '3px solid transparent',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-            }}
-          >
-            <Layers size={16} /> 📑 Phụ Lục Hợp Đồng ({contract.appendices?.length || 0})
-          </button>
+            <button
+              onClick={() => setActiveTab('appendices')}
+              style={{
+                padding: '9px 16px',
+                border: 'none',
+                background: 'none',
+                cursor: 'pointer',
+                fontWeight: 700,
+                fontSize: '0.84rem',
+                color: activeTab === 'appendices' ? 'var(--orange-primary)' : 'var(--text-muted)',
+                borderBottom: activeTab === 'appendices' ? '3px solid var(--orange-primary)' : '3px solid transparent',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '7px',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <Layers size={15} /> Phụ Lục Hợp Đồng ({contract.appendices?.length || 0})
+            </button>
+          </div>
+
+          {/* Contextual Quick Hint */}
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+            {activeTab === 'scan' && (contract.fileUrl ? 'Đang xem bản Scan gốc' : 'Chưa có file scan')}
+            {activeTab === 'agreement' && (attachedWord ? `Tệp: ${cleanFileName(attachedWord.fileName)}` : 'Bản văn bản hệ thống')}
+            {activeTab === 'appendices' && `${contract.appendices?.length || 0} phụ lục bổ sung`}
+          </div>
         </div>
 
         {/* Tab Content */}
-        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ flex: 1, minHeight: 0, overflowY: activeTab === 'scan' ? 'hidden' : 'auto', display: 'flex', flexDirection: 'column' }}>
           {/* TAB 1: BẢN SCAN PDF HỢP ĐỒNG */}
           {activeTab === 'scan' && (
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', backgroundColor: '#334155' }}>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, backgroundColor: '#334155' }}>
               {contract.fileUrl ? (
-                <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, flex: 1 }}>
                   {/* Toolbar above embedded PDF */}
                   <div
                     style={{
-                      padding: '8px 20px',
-                      backgroundColor: '#1e293b',
+                      padding: '8px 18px',
+                      backgroundColor: '#0f172a',
                       color: '#ffffff',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
-                      borderBottom: '1px solid #475569',
+                      borderBottom: '1px solid #334155',
+                      flexShrink: 0,
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem' }}>
-                      <FileCheck size={16} style={{ color: '#22c55e' }} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.82rem' }}>
+                      <FileCheck size={15} style={{ color: '#22c55e' }} />
                       <span>
-                        Tệp scan hợp đồng (Dấu đỏ): <strong>{contract.fileUrl.split('/').pop()}</strong>
+                        Tệp scan dấu đỏ: <strong>{cleanFileName(contract.fileUrl)}</strong>
                       </span>
                     </div>
-                    <div style={{ display: 'flex', gap: '10px' }}>
+                    <div style={{ display: 'flex', gap: '8px' }}>
                       <a
                         href={contract.fileUrl}
                         target="_blank"
                         rel="noreferrer"
                         className="btn btn-secondary btn-sm"
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', textDecoration: 'none', color: '#ffffff', backgroundColor: '#334155', border: '1px solid #475569' }}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', textDecoration: 'none', color: '#ffffff', backgroundColor: '#334155', border: '1px solid #475569', fontSize: '0.78rem', padding: '4px 10px' }}
                       >
-                        <ExternalLink size={14} /> Mở Cửa Sổ Mới
+                        <ExternalLink size={13} /> Mở Cửa Sổ Mới
                       </a>
                       <a
                         href={contract.fileUrl}
                         download={`${contract.contractNo}_ScanDauDo.pdf`}
                         className="btn btn-secondary btn-sm"
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', textDecoration: 'none', color: '#ffffff', backgroundColor: '#334155', border: '1px solid #475569' }}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', textDecoration: 'none', color: '#ffffff', backgroundColor: '#334155', border: '1px solid #475569', fontSize: '0.78rem', padding: '4px 10px' }}
                       >
-                        <Download size={14} /> Tải File Scan PDF
+                        <Download size={13} /> Tải File Scan PDF
                       </a>
                       <button
                         className="btn btn-primary btn-sm"
                         onClick={() => fileInputRef.current?.click()}
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.78rem', padding: '4px 10px' }}
                       >
-                        <UploadCloud size={14} /> Đổi Bản Scan Khác
+                        <UploadCloud size={13} /> Đổi Bản Scan
                       </button>
                     </div>
                   </div>
 
-                  {/* Embedded PDF iframe */}
-                  <div style={{ flex: 1, minHeight: '480px', position: 'relative' }}>
+                  {/* Embedded PDF iframe (Fills 100% of remaining height cleanly) */}
+                  <div style={{ flex: 1, minHeight: 0, width: '100%', height: '100%', position: 'relative' }}>
                     <iframe
-                      src={`${contract.fileUrl}#toolbar=1&navpanes=1`}
+                      src={`${contract.fileUrl}#toolbar=1&navpanes=1&zoom=115`}
                       title={`Bản scan ${contract.contractNo}`}
-                      style={{ width: '100%', height: '100%', border: 'none' }}
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        border: 'none',
+                        display: 'block',
+                      }}
                     />
                   </div>
                 </div>
@@ -860,10 +969,10 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
           {/* TAB 2: VĂN BẢN ĐIỀU KHOẢN HỢP ĐỒNG & XUẤT WORD */}
           {activeTab === 'agreement' && (
             <div style={{ padding: '24px' }}>
-              {/* Word Export Banner */}
+              {/* Word Export Banner & Reading Zoom Bar */}
               <div
                 style={{
-                  padding: '14px 20px',
+                  padding: '12px 20px',
                   borderRadius: '12px',
                   backgroundColor: 'rgba(37, 99, 235, 0.06)',
                   border: '1px solid rgba(37, 99, 235, 0.2)',
@@ -880,10 +989,53 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
                     📄 Bản Soạn Thảo Hợp Đồng Gốc (Microsoft Word)
                   </h4>
                   <p style={{ margin: '2px 0 0 0', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-                    Bạn có thể tải tệp Word hoàn chỉnh về máy để chỉnh sửa các điều khoản theo thỏa thuận.
+                    Bạn có thể tùy chỉnh cỡ chữ phóng to để đọc rõ ràng hoặc tải tệp Word hoàn chỉnh về máy.
                   </p>
                 </div>
-                <div style={{ display: 'flex', gap: '10px' }}>
+
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  {/* Zoom Controls for Reading */}
+                  <div
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      backgroundColor: '#ffffff',
+                      border: '1px solid #cbd5e1',
+                      padding: '3px 8px',
+                      borderRadius: '8px',
+                    }}
+                  >
+                    <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)' }}>Cỡ chữ:</span>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => setReadingZoom((z) => Math.max(0.85, Number((z - 0.1).toFixed(1))))}
+                      style={{ padding: '2px 6px', height: '24px', minWidth: '24px' }}
+                      title="Thu nhỏ cỡ chữ"
+                    >
+                      <ZoomOut size={13} />
+                    </button>
+                    <span style={{ fontSize: '0.8rem', fontWeight: 700, minWidth: '38px', textAlign: 'center' }}>
+                      {Math.round(readingZoom * 100)}%
+                    </span>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => setReadingZoom((z) => Math.min(1.6, Number((z + 0.1).toFixed(1))))}
+                      style={{ padding: '2px 6px', height: '24px', minWidth: '24px' }}
+                      title="Phóng to cỡ chữ"
+                    >
+                      <ZoomIn size={13} />
+                    </button>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => setReadingZoom(1.1)}
+                      style={{ padding: '2px 6px', height: '24px' }}
+                      title="Đặt lại mặc định"
+                    >
+                      <RotateCcw size={12} />
+                    </button>
+                  </div>
+
                   <button
                     className="btn btn-primary btn-sm"
                     onClick={handleDownloadWord}
@@ -907,12 +1059,15 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
                   backgroundColor: '#ffffff',
                   border: '1px solid var(--border-color)',
                   borderRadius: '12px',
-                  padding: '32px 40px',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+                  padding: `${Math.round(36 * readingZoom)}px ${Math.round(48 * readingZoom)}px`,
+                  maxWidth: '1050px',
+                  margin: '0 auto',
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.06)',
                   fontFamily: "'Times New Roman', serif",
-                  fontSize: '15px',
-                  lineHeight: 1.6,
+                  fontSize: `${Math.round(15 * readingZoom)}px`,
+                  lineHeight: 1.65,
                   color: '#1e293b',
+                  transition: 'all 0.15s ease',
                 }}
               >
                 {/* National Banner */}
@@ -929,37 +1084,38 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
                 {/* Title */}
                 <div style={{ textAlign: 'center', marginBottom: '25px' }}>
                   <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, textTransform: 'uppercase' }}>
-                    HỢP ĐỒNG THI CÔNG XÂY DỰNG CÔNG TRÌNH
+                    {meta?.contractTitle || 'HỢP ĐỒNG XÂY DỰNG'}
                   </h3>
                   <div style={{ fontStyle: 'italic', fontSize: '14px', marginTop: '4px' }}>
                     Số: <strong>{contract.contractNo}</strong>
                   </div>
                   <div style={{ fontSize: '14px', marginTop: '2px' }}>
-                    Gói thầu: <strong>{contract.contractName}</strong>
+                    Gói thầu / Hạng mục: <strong>{contract.contractName}</strong>
                   </div>
                 </div>
 
                 {/* Parties */}
                 <div style={{ marginBottom: '20px' }}>
                   <div style={{ fontWeight: 700, fontSize: '15px', textTransform: 'uppercase', marginBottom: '4px' }}>
-                    BÊN GIAO THẦU (CHỦ ĐẦU TƯ - BÊN A):
+                    {meta?.partyA.title || 'BÊN GIAO THẦU (BÊN A)'}:
                   </div>
                   <div style={{ paddingLeft: '16px' }}>
-                    <div>- Đơn vị: <strong>{contract.projectName?.includes('Móng M02B') ? 'TẬP ĐOÀN NAM LONG GROUP' : 'BAN QUẢN LÝ DỰ ÁN ĐẦU TƯ XÂY DỰNG'}</strong></div>
-                    <div>- Dự án / Công trình: <strong>{contract.projectName}</strong></div>
-                    <div>- Địa điểm thi công: <strong>Bình Dương / Theo hồ sơ mời thầu</strong></div>
+                    <div>- Đơn vị: <strong>{meta?.partyA.name}</strong></div>
+                    <div>- Người đại diện: <strong>{meta?.partyA.rep || 'Ban Lãnh Đạo'}</strong></div>
+                    <div>- Mã số thuế: <strong>{meta?.partyA.taxCode || 'Theo hồ sơ pháp lý'}</strong></div>
+                    <div>- Địa chỉ / Trụ sở: <strong>{meta?.partyA.address || 'Theo hồ sơ hợp đồng'}</strong></div>
                   </div>
                 </div>
 
                 <div style={{ marginBottom: '20px' }}>
                   <div style={{ fontWeight: 700, fontSize: '15px', textTransform: 'uppercase', marginBottom: '4px' }}>
-                    BÊN NHẬN THẦU (NHÀ THẦU THI CÔNG - BÊN B):
+                    {meta?.partyB.title || 'BÊN NHẬN THẦU (BÊN B)'}:
                   </div>
                   <div style={{ paddingLeft: '16px' }}>
-                    <div>- Tên doanh nghiệp: <strong>CÔNG TY CỔ PHẦN XÂY DỰNG KỸ THUẬT BMC</strong></div>
-                    <div>- Người đại diện: <strong>Ban Giám Đốc Công Ty</strong></div>
-                    <div>- Mã số thuế: <strong>3700148567</strong></div>
-                    <div>- Trụ sở: <strong>Khu đô thị sinh thái Chánh Mỹ, Phường Chánh Mỹ, TP. Thủ Dầu Một, Tỉnh Bình Dương</strong></div>
+                    <div>- Tên doanh nghiệp: <strong>{meta?.partyB.name}</strong></div>
+                    <div>- Người đại diện: <strong>{meta?.partyB.rep || 'Ban Giám Đốc'}</strong></div>
+                    <div>- Mã số thuế: <strong>{meta?.partyB.taxCode || '3700148567'}</strong></div>
+                    <div>- Trụ sở: <strong>{meta?.partyB.address || 'Khu đô thị sinh thái Chánh Mỹ, Phường Chánh Mỹ, TP. Thủ Dầu Một, Tỉnh Bình Dương'}</strong></div>
                   </div>
                 </div>
 
@@ -1166,13 +1322,40 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div style={{ padding: '12px 24px', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-card-subtle, #f8fafc)' }}>
-          <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <FileCheck size={14} style={{ color: 'var(--emerald-success)' }} />
-            Quản trị Hợp đồng Thi công BMC: Tải file Word gốc (.doc) và Lưu trữ Scan PDF (Dấu đỏ)
+        <div
+          style={{
+            padding: '10px 20px',
+            borderTop: '1px solid var(--border-color)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            backgroundColor: '#ffffff',
+            flexShrink: 0,
+          }}
+        >
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <ShieldCheck size={16} style={{ color: '#16a34a' }} />
+            <span>Hệ thống Quản trị Hợp đồng Thi công BMC • Lưu trữ pháp lý số</span>
           </div>
-          <button className="btn btn-secondary" onClick={onClose}>
-            Đóng
+          <button
+            className="btn btn-secondary"
+            onClick={onClose}
+            style={{
+              padding: '6px 16px',
+              fontWeight: 600,
+              fontSize: '0.84rem',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              backgroundColor: '#f8fafc',
+              border: '1px solid #cbd5e1',
+              color: '#1e293b',
+              borderRadius: '6px',
+              cursor: 'pointer',
+            }}
+          >
+            <span>Đóng Cửa Sổ</span>
+            <kbd style={{ fontSize: '0.72rem', backgroundColor: '#e2e8f0', color: '#475569', padding: '1px 5px', borderRadius: '4px', border: '1px solid #cbd5e1' }}>Esc</kbd>
           </button>
         </div>
       </div>

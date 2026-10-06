@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Investor, Project, Contract } from '../../types';
 import { formatCurrency, formatDate } from '../../utils/formatters';
-import { X, Building2, Phone, Mail, MapPin, Hash, User, Briefcase, FileText } from 'lucide-react';
+import { X, Building2, Phone, Mail, MapPin, Hash, User, Briefcase, FileText, Maximize2, Minimize2, FolderOpen, Eye, ExternalLink } from 'lucide-react';
 
 interface InvestorDetailModalProps {
   investor: Investor;
@@ -18,6 +19,9 @@ export const InvestorDetailModal: React.FC<InvestorDetailModalProps> = ({
   onClose,
   onOpenContract,
 }) => {
+  const navigate = useNavigate();
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
   // Find linked projects and contracts
   const linkedProjects = projects.filter(
     (p) => p.investorId === investor.id || p.investorName?.toLowerCase().includes(investor.name.toLowerCase())
@@ -34,13 +38,14 @@ export const InvestorDetailModal: React.FC<InvestorDetailModalProps> = ({
       style={{
         position: 'fixed',
         inset: 0,
-        backgroundColor: 'rgba(15, 23, 42, 0.65)',
-        backdropFilter: 'blur(4px)',
+        backgroundColor: 'rgba(15, 23, 42, 0.7)',
+        backdropFilter: 'blur(5px)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         zIndex: 1100,
-        padding: '20px',
+        padding: isFullscreen ? 0 : '14px',
+        transition: 'all 0.15s ease',
       }}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
@@ -49,15 +54,17 @@ export const InvestorDetailModal: React.FC<InvestorDetailModalProps> = ({
       <div
         className="card"
         style={{
-          width: '800px',
-          maxWidth: '100%',
-          maxHeight: '90vh',
+          width: isFullscreen ? '100vw' : '96vw',
+          maxWidth: isFullscreen ? '100vw' : '1580px',
+          height: isFullscreen ? '100vh' : '95vh',
+          maxHeight: isFullscreen ? '100vh' : '95vh',
           display: 'flex',
           flexDirection: 'column',
-          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-          borderRadius: '16px',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
+          borderRadius: isFullscreen ? 0 : '16px',
           overflow: 'hidden',
           padding: 0,
+          transition: 'all 0.15s ease',
         }}
       >
         {/* Header */}
@@ -109,19 +116,40 @@ export const InvestorDetailModal: React.FC<InvestorDetailModalProps> = ({
               </h2>
             </div>
           </div>
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={onClose}
-            style={{ borderRadius: '50%', width: '32px', height: '32px', padding: 0 }}
-          >
-            <X size={18} />
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => setIsFullscreen(!isFullscreen)}
+              title={isFullscreen ? 'Thu nhỏ giao diện' : 'Toàn màn hình'}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: '0.85rem',
+                padding: '6px 14px',
+                borderRadius: '8px',
+                fontWeight: 600,
+                backgroundColor: isFullscreen ? 'rgba(234, 88, 12, 0.12)' : undefined,
+                color: isFullscreen ? 'var(--orange-primary)' : undefined,
+              }}
+            >
+              {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+              <span>{isFullscreen ? 'Thu nhỏ' : 'Toàn màn hình'}</span>
+            </button>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={onClose}
+              style={{ borderRadius: '50%', width: '36px', height: '36px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              <X size={20} />
+            </button>
+          </div>
         </div>
 
         {/* Body */}
-        <div style={{ padding: '24px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <div style={{ padding: '24px 30px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '22px' }}>
           {/* Info cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
             <div style={{ padding: '14px', borderRadius: '10px', backgroundColor: 'var(--bg-card-subtle, #f8fafc)', border: '1px solid var(--border-color)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '4px' }}>
                 <Hash size={14} /> Mã số thuế
@@ -218,6 +246,7 @@ export const InvestorDetailModal: React.FC<InvestorDetailModalProps> = ({
                       <th>Địa Điểm</th>
                       <th>Tiến Độ</th>
                       <th>Trạng Thái</th>
+                      <th style={{ textAlign: 'center' }}>Thao Tác</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -238,6 +267,29 @@ export const InvestorDetailModal: React.FC<InvestorDetailModalProps> = ({
                           <span className={`badge ${p.status === 'IN_PROGRESS' ? 'badge-active' : 'badge-neutral'}`}>
                             {p.status === 'IN_PROGRESS' ? 'Đang thi công' : p.status}
                           </span>
+                        </td>
+                        <td style={{ textAlign: 'center' }}>
+                          <button
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => {
+                              onClose();
+                              navigate(`/projects/${p.id}`);
+                            }}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              fontSize: '0.78rem',
+                              padding: '4px 10px',
+                              color: 'var(--blue-tech)',
+                              borderColor: 'rgba(37, 99, 235, 0.3)',
+                              backgroundColor: 'rgba(37, 99, 235, 0.06)',
+                              fontWeight: 600,
+                            }}
+                            title="Mở trang chi tiết dự án để xem tiến độ, WBS và kho hồ sơ bản vẽ"
+                          >
+                            <FolderOpen size={13} /> Vào Dự Án & Kho Hồ Sơ
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -269,7 +321,7 @@ export const InvestorDetailModal: React.FC<InvestorDetailModalProps> = ({
                       <th>Ngày Ký</th>
                       <th>Giá Trị Ban Đầu</th>
                       <th>Sau Điều Chỉnh</th>
-                      <th>Thao Tác</th>
+                      <th style={{ textAlign: 'center' }}>Thao Tác</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -282,18 +334,51 @@ export const InvestorDetailModal: React.FC<InvestorDetailModalProps> = ({
                         <td style={{ fontWeight: 700, color: 'var(--orange-primary)' }}>
                           {formatCurrency(c.totalAdjustedValue || c.contractValue)}
                         </td>
-                        <td>
-                          {onOpenContract && (
-                            <button
-                              className="btn btn-secondary btn-sm"
-                              onClick={() => {
-                                onClose();
-                                onOpenContract(c);
-                              }}
-                            >
-                              Xem Hợp Đồng
-                            </button>
-                          )}
+                        <td style={{ textAlign: 'center' }}>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                            {onOpenContract && (
+                              <button
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => {
+                                  onClose();
+                                  onOpenContract(c);
+                                }}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  fontSize: '0.78rem',
+                                  padding: '4px 10px',
+                                  fontWeight: 600,
+                                }}
+                                title="Xem chi tiết hợp đồng, điều khoản và phụ lục"
+                              >
+                                <FileText size={13} /> Chi Tiết HĐ
+                              </button>
+                            )}
+                            {c.fileUrl && (
+                              <a
+                                href={c.fileUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="btn btn-secondary btn-sm"
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  fontSize: '0.78rem',
+                                  padding: '4px 8px',
+                                  color: '#dc2626',
+                                  borderColor: 'rgba(239, 68, 68, 0.3)',
+                                  backgroundColor: 'rgba(239, 68, 68, 0.05)',
+                                  textDecoration: 'none',
+                                }}
+                                title="Xem tệp scan hợp đồng PDF đã ký dấu đỏ"
+                              >
+                                <Eye size={12} /> Scan PDF
+                              </a>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
